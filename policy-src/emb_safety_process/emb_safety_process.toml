@@ -1,0 +1,7 @@
+name = "emb_safety_process"
+version = "0.1.0"
+plugin_type = "Policy"
+wasm_path = "emb_safety_process.wasm"
+wasm_hash = ""
+capabilities = []
+requires = []

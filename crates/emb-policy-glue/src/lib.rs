@@ -53,3 +53,32 @@ pub fn evaluate_pack(ctx: &PolicyContext, pack: Pack) -> PolicyResult {
     let (message, evidence) = emb_rules::render(&findings, &profile);
     PolicyResult::deny_with_evidence(reason_codes::INVARIANT_VIOLATION, message, evidence)
 }
+
+/// `emb_safety_process`: the process pack when a change is proposed and
+/// sealed, and at push the approvals its deviations and profile changes
+/// need. A missing approval is pending evidence, not a violation; where the
+/// host supplies no evidence (a pulled knot, an older host) nothing is judged.
+pub fn evaluate_process(ctx: &PolicyContext) -> PolicyResult {
+    if !matches!(ctx.stage, Some(LifecycleStage::PrePush)) {
+        return evaluate_pack(ctx, Pack::Process);
+    }
+    let Ok(profile) = Profile::parse(PROFILE_TOML) else {
+        return PolicyResult::Allow;
+    };
+    let files = changed_files(&ctx.knot.transform.payload);
+    let texts: Vec<(&str, std::borrow::Cow<str>)> = files.iter().map(|(p, b)| (*p, String::from_utf8_lossy(b))).collect();
+    let refs: Vec<(&str, &str)> = texts.iter().map(|(p, t)| (*p, t.as_ref())).collect();
+    let needed = emb_rules::process::approvals_needed(&refs, &profile);
+    if needed.is_empty() {
+        return PolicyResult::Allow;
+    }
+    let Some(evidence) = PolicyContext::evidence() else {
+        return PolicyResult::Allow;
+    };
+    let missing: Vec<_> = needed.into_iter().filter(|a| !ctx.exception_granted_by(Some(&evidence), a.assertion)).collect();
+    if missing.is_empty() {
+        return PolicyResult::Allow;
+    }
+    let (message, detail) = emb_rules::process::render_pending(&missing);
+    PolicyResult::deny_with_evidence(reason_codes::EVIDENCE_PENDING, message, detail)
+}

@@ -252,6 +252,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "emb_safety_process"
+version = "0.1.0"
+dependencies = [
+ "emb-policy-glue",
+ "emb-rules",
+ "nool-aram-policy-sdk",
+]
+
+[[package]]
 name = "emb_security_baseline"
 version = "0.1.0"
 dependencies = [

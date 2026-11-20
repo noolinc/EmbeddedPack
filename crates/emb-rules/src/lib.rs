@@ -11,6 +11,7 @@ pub mod hardware;
 pub mod integrity;
 pub mod lex;
 pub mod model;
+pub mod process;
 pub mod profile;
 pub mod resources;
 pub mod runtime;
