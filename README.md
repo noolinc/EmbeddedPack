@@ -1,356 +1,167 @@
 # Embedded Policy Pack for Nool
 
-**Firmware rules that are enforced when a change is made, not reported after it.**
+Add firmware rules to the changes you review in [Nool](https://www.nool.dev/).
+For example, the pack can catch a print call in an interrupt handler, a
+hard-coded Wi-Fi password, or a build flag that disables secure boot. Nool
+reports the rule ID and the file so the author can fix the change before it
+lands. The same checks apply to people and coding agents.
 
-MISRA, BARR-C, AUTOSAR C++14, Power of 10, ETSI EN 303 645, NIST SP 800-193:
-every embedded team has the rules. The hard part is keeping them while the code
-changes every day, under schedule pressure, and now with AI agents writing a
-growing share of it. This pack turns 79 of those rules into eight policies
-that [Nool](https://www.nool.dev/) runs on every governed change, for human
-and agent authors alike.
-You install the two or three policies your project needs. A change that
-breaks one of their rules does not land.
+Start with the policies closest to the problems you see in your firmware. The
+setup below walks through a connected-device example and ends with a quick
+check that proves a policy is active.
 
-It works the same with or without AI. A team that writes every line by hand
-gets strict, immediate, clause-level feedback during development. A team that
-uses coding agents gets a boundary the agent cannot talk its way around.
+## Pick your policies
 
-## See it work
-
-An engineer (or an agent) adds a diagnostic print to a UART interrupt handler:
-
-```c
-void USART1_IRQHandler(void)
-{
-    rx_count++;
-    printf("rx %u\n", rx_count);
-}
-```
-
-```console
-$ nool propose --path src/uart.c --intent "Count received bytes in the UART interrupt" \
-      --why "Diagnostics for dropped bytes" --solidify
-
-Error: Gate stack denied [POLICY_DENY] at stage pre-propose:
-[EMB-RT-001] src/uart.c:7: printf() in ISR USART1_IRQHandler() (an ISR shall not block,
-allocate, print or call the kernel's task-level API) -- BARR-C:2018 6.5
-  | deviate: /* EMB-DEVIATION(EMB-RT-001): <reason> */ on or above the line
-profile: generic-cortex-m4 (RAM 65536 B, flash 262144 B, fpu Single, Rtos, heap None, ASIL B, 62304 class B, SIL 2)
-```
-
-The refusal says what, where, why, which clause, and for which hardware. The
-author moves the print out of the handler and proposes again:
-
-```console
-✓ Landed knot 9279fcc7
-```
-
-Nothing reached the branch in between. No CI run, no review round, no ticket.
-
-When a rule really has to be broken, the author writes a deviation beside the
-code, and the change is held at push until a reviewer the repository trusts
-signs it off:
-
-```console
-$ nool push origin
-Error: push refused: evidence pending for Knot 20576728 (policy emb_safety_process:
-[EMB-PRC-005] src/a.c:4 deviates EMB-PRC-001 (a deviation shall be authorized by an
-independent reviewer before push) -- MISRA Compliance:2020 4.1
-  | waiting for a trusted `emb-deviation-review` pass)
-```
-
-The author's own signature does not release it. The reviewer pulls the held
-change from the author's repository, signs it on their own machine, and
-pushes only the approval; the change itself reaches the shared branch after
-that. ([How approval works](docs/GUIDE.md#getting-a-deviation-approved).)
-
-## What you get
-
-| Without the pack | With the pack |
+| If you work on… | Start with… |
 |---|---|
-| Violations appear in a CI analyser report after the code is written | The change is refused as it is proposed, with the clause, while the author still has the context |
-| Green can be bought with `NOLINT`, `-w`, a skipped test or an edited `.clang-tidy` | Each of those is itself a refused change |
-| Tools do not know the board | Rules use your RAM, flash, FPU, heap policy, execution model and safety level |
-| Deviations are tracked in a spreadsheet and approved by email | A deviation sits beside the code and needs a signed approval from a trusted key before push |
-| An AI agent is trusted to follow the coding standard | The agent gets the same refusal as a person and corrects itself in its own loop |
-| Audit evidence is assembled by hand | Every landed change and every approval is a signed record in the history |
+| Bare-metal C firmware | `emb_hardware_fit`, `emb_resource_bounds`, `emb_c_subset` |
+| RTOS firmware | `emb_runtime_safety`, `emb_resource_bounds`, `emb_hardware_fit` |
+| A connected device with over-the-air updates | `emb_security_baseline`, `emb_firmware_integrity`, `emb_runtime_safety` |
+| Safety-related C firmware | `emb_c_subset`, `emb_resource_bounds`, `emb_safety_process` |
+| C++ firmware | `emb_cpp_subset`, `emb_resource_bounds`, `emb_hardware_fit` |
+| A bootloader or update component | `emb_firmware_integrity`, `emb_security_baseline`, `emb_c_subset` |
 
-## Eight policies: pick the ones your project needs
+These are starting points. On a legacy codebase, try one policy first. The
+pack checks the whole file when you edit it, so a small fix can surface an
+older violation in that file. [Policy selection and adoption guide](docs/GUIDE.md#3-choose-your-policies)
 
-No project needs all eight. Each policy covers one kind of risk, and each one
-you add is more rules for every change to pass.
+### What each policy checks
 
-| Policy | Rules | Refuses | Sources |
-|---|---|---|---|
-| `emb_c_subset` | 19 | `goto`, `setjmp`, banned library functions, octal constants, missing `default`, fall-through, unbraced bodies, assignment in conditions | MISRA C:2012, BARR-C:2018, CERT C, Power of 10 |
-| `emb_cpp_subset` | 18 | C-style casts, `reinterpret_cast`, `const_cast`, `NULL`, banned headers and functions, variadics, `union`, unscoped enums | AUTOSAR C++14, JSF AV C++ |
-| `emb_resource_bounds` | 6 | Heap use beyond the profile, recursion, `alloca`/VLAs, unbounded loops, over-long functions, deep pointers | MISRA C:2012, Power of 10, JSF AV |
-| `emb_hardware_fit` | 6 | Stack objects too big for the RAM, floating point without the FPU, flash-heavy libraries, exceptions without a heap, code that contradicts superloop / RTOS / event-driven | Your hardware profile |
-| `emb_security_baseline` | 11 | Hard-coded credentials and private keys, weak crypto, `rand`, `gets`, unbounded string functions, disabled TLS verification, cleartext endpoints | ETSI EN 303 645, CWE |
-| `emb_runtime_safety` | 5 | Blocking or kernel task-level calls in an ISR, interrupts left disabled, non-reentrant library calls, watchdog disabled or fed from an ISR | BARR-C:2018, NASA-GB-8719.13, CERT C |
-| `emb_firmware_integrity` | 7 | Silenced warnings, removed hardening, secure boot or rollback protection off, development signing keys, unauthenticated build downloads, open debug access | NIST SP 800-193, SP 800-218, UN R156, EN 303 645 |
-| `emb_safety_process` | 7 | Analysis suppressions, untraced safety code, disabled tests, malformed deviations, weakened analysis config; holds unapproved deviations at push | MISRA Compliance:2020, NASA NPR 7150.2D |
-
-### Where to start
-
-| Your project | Start with these three |
+| Policy | Examples |
 |---|---|
-| Small bare-metal MCU in C | `emb_hardware_fit`, `emb_resource_bounds`, `emb_c_subset` |
-| RTOS firmware in C | `emb_runtime_safety`, `emb_resource_bounds`, `emb_hardware_fit` |
-| Connected / IoT device with OTA update | `emb_security_baseline`, `emb_firmware_integrity`, `emb_runtime_safety` |
-| Safety-related C (ASIL, IEC 62304 class or SIL assigned) | `emb_c_subset`, `emb_resource_bounds`, `emb_safety_process` |
-| C++ application firmware | `emb_cpp_subset`, `emb_resource_bounds`, `emb_hardware_fit` |
-| Bootloader or update component | `emb_firmware_integrity`, `emb_security_baseline`, `emb_c_subset` |
-| Large legacy code base | `emb_firmware_integrity`, `emb_runtime_safety`, `emb_security_baseline` |
+| `emb_c_subset` | Flags `goto`, `setjmp`, assignment inside conditions and other patterns covered by MISRA C, BARR-C and CERT C. |
+| `emb_cpp_subset` | Flags C-style casts, banned headers, variadic functions and other restricted C++ constructs. |
+| `emb_resource_bounds` | Checks heap use, recursion and loops whose bounds the policy cannot establish. |
+| `emb_hardware_fit` | Checks code against the configured RAM, flash, FPU and execution model. |
+| `emb_security_baseline` | Flags embedded credentials, unsafe string functions and disabled TLS verification. |
+| `emb_runtime_safety` | Flags blocking calls in interrupt handlers, interrupts left disabled and unsafe watchdog use. |
+| `emb_firmware_integrity` | Flags weakened build and boot settings, such as disabled rollback protection or development signing keys. |
+| `emb_safety_process` | Checks for disabled tests, suppressed analysis findings and missing requirement tags where applicable. It also gates push on review for deviations and profile changes. |
 
-Teams that rely on AI agents add `emb_safety_process`, which stops findings
-being suppressed and tests being skipped.
-
-[Section 3 of the guide](docs/GUIDE.md#3-choose-your-policies) has the full
-selection tables: by project, by the problem you keep having, and what each
-policy costs to adopt on existing code. The guide also lists every rule, its
-clause, and what it cannot see.
-
-## Hardware-aware by design
-
-Firmware architecture follows the hardware. Code that is correct on a 1 MB
-Cortex-M7 with an RTOS is a defect on a 16 KB superloop part. You describe the
-target once:
-
-```toml
-[hardware]
-ram_bytes = 65536
-flash_bytes = 262144
-fpu = "single"           # none | single | double
-
-[architecture]
-execution_model = "rtos" # superloop | rtos | event-driven
-heap = "none"            # none | init-only | allowed
-
-[safety]
-iso26262_asil = "B"      # QM | A | B | C | D
-iec62304_class = "B"
-iec61508_sil = 2
-```
-
-and the rules follow: `double` is refused on a single-precision FPU,
-`vTaskDelay` on a superloop, a 2 KB stack buffer on 64 KB of RAM, `malloc`
-with no heap. At ASIL C/D, class C or SIL 3/4 the strict rules can no longer
-be deviated at all.
-
-## Why Nool
-
-Nool adds coordination, policy checks and signed evidence to a Git workflow.
-Landed changes are mirrored as ordinary Git commits, so your Git host, pull
-requests and CI stay in use. Engineers can work from the CLI, with agents such
-as Claude Code, Codex or opencode, or with Nool's bundled `nool code` agent.
-[Nool features](https://www.nool.dev/features) · [Coding agent docs](https://www.nool.dev/docs/nool-code)
-
-- **Coordinate before editing.** Declare the files or symbols a task will touch.
-  A lease makes overlapping work visible while agents are still planning.
-- **Check before landing.** Nool can run builds and tests during validation.
-  This pack adds eight compiled WebAssembly policies to Nool's Aram policy
-  engine. Those policies check proposed changes in a sandbox with bounded
-  execution and no filesystem or network access. Both engineers and agents
-  see the same rule IDs and refusal messages.
-- **Record evidence and gate publication.** Nool signs each landed change,
-  called a *knot*. Use `nool evidence knot <id>` to inspect its checks and
-  `nool attest show <id>` to see attestations. With `emb_safety_process`
-  installed, a change carrying a deviation or a hardware-profile edit can
-  land locally and wait for trusted approval before push.
-  [Governance and audit docs](https://www.nool.dev/docs/governance)
-
-To enforce a consistent policy set across replicas, pin the installed policy
-hashes in `nool.toml` with `nool admin plugin pin`. The edition limits count
-compiled WASM policies and declarative rules together. Community loads up to 3,
-Team up to 11, and Enterprise has no limit.
-[Aram policy reference](https://www.nool.dev/docs/policies) · [Nool editions](https://www.nool.dev/pricing)
-
-## Why not a pre-commit hook, a linter or a unit test?
-
-All three are worth having, and none of them can do this job. The difference is not the
-rules; it is who is able to switch them off.
-
-**A Git pre-commit hook is a request.**
-
-| Pre-commit hook | Aram |
-|---|---|
-| Lives in each clone and is not installed by `git clone`; a new laptop or a new agent sandbox has no hook until someone sets it up | The pinned policy set arrives with the repository and runs wherever the repository is used |
-| `git commit --no-verify` skips it, and an agent under pressure to finish will find that flag | There is no flag. The gate is part of how a change becomes history |
-| Runs whatever tool versions that machine has, so two engineers get two answers | A sandboxed WASM component with a pinned hash gives one answer everywhere |
-| Is a script with the author's full privileges: it can read keys, reach the network, or be edited to print "ok" | Runs with no file or network access |
-| Leaves no proof that it ran | Each landed change is a signed record made under the pinned policy set |
-| Cannot ask "has someone else approved this?" | Can hold a change at push until a trusted key has attested it |
-
-Server-side hooks and CI close some of these gaps, but they act after the code
-is written, committed and pushed. The author has moved on, the agent's session
-has ended, and the fix becomes a second change and a second review.
-
-**A linter is an opinion.**
-
-| Linter or static analyser | Aram |
-|---|---|
-| Reports findings; whoever runs it decides what a finding means | Decides: the change lands or it does not |
-| Is silenced by the author, in the same change, with `NOLINT`, a pragma, `-w` or an edit to its config | Those edits are changes too, and this pack refuses them (EMB-PRC-001, EMB-PRC-006, EMB-FWI-001) |
-| A suppression needs nobody's agreement | A deviation needs a reason beside the code and an approval signed by a trusted key |
-| Knows the language, not your board | Reads RAM, flash, FPU, heap policy, execution model and safety level from the hardware profile |
-| Judges code only | Also judges build flags, boot configuration, CI scripts, test files and the analyser's own configuration |
-
-**A unit test answers a different question.**
-
-A test asks "does this code give the right output for the inputs I thought
-of?" A policy asks "is this change allowed to exist in this product?" Much of
-what goes wrong in firmware passes its tests:
-
-| The change | Its unit tests | Aram |
-|---|---|---|
-| `printf` in an interrupt handler | Pass: on the host there is no interrupt context, and on the bench it works most of the time | Refused (EMB-RT-001) |
-| `malloc` in a control loop on a part with no heap budget | Pass: the host has gigabytes | Refused (EMB-RES-001) |
-| `double` arithmetic on a single-precision FPU | Pass: the result is correct, only slow | Refused (EMB-HW-002) |
-| A 2 KB buffer on a 1 KB task stack | Pass: the host stack is megabytes | Refused (EMB-HW-001) |
-| Secure boot switched off in the release config | Pass, and faster | Refused (EMB-FWI-003) |
-| A Wi-Fi password in the source | Pass: it connects | Refused (EMB-SEC-001) |
-
-Three further limits:
-
-- **A test covers the code it was written for.** Someone must write a test
-  for each function and remember each hazard. A rule is written once and
-  applies to every file and every future change, including code nobody
-  thought to test.
-- **The author controls the test.** The person or agent who writes the code
-  also writes, edits, skips or deletes its test. A failing test is one
-  `DISABLED_` or `TEST_IGNORE()` away from green.
-- **A test proves nothing until something runs it and acts on the result.**
-  That is again a hook or a CI job, with the limits above.
-
-Tests remain the only way to show the code does what it should, and this pack
-checks none of that. They work together here too: Nool builds a change and
-runs its tests before it lands, and `emb_safety_process` refuses a change that
-disables or skips a test (EMB-PRC-003).
-
-A real analyser still sees far more than this pack does: types, data flow,
-macro expansion, the full MISRA rule set. Keep it, and keep your tests. The
-analyser finds deep defects and the tests prove behaviour; Aram makes sure
-nobody, human or AI, can turn the analyser down, skip the tests or suppress
-a finding without a signed approval.
+The pack implements 79 rules across these eight policies. The guide lists their
+source clauses and describes what each rule checks. [Full policy reference](docs/GUIDE.md#7-the-policies)
 
 ## Set up in your firmware repository
 
-Install the Nool CLI and verify it with `nool --version`. To build the pack,
-you also need a Rust toolchain with `rustup target add wasm32-unknown-unknown`
-and the policy SDK that the Nool installer places in `~/.nool/sdk`.
-[Install Nool](https://www.nool.dev/setup) · [Nool quickstart](https://www.nool.dev/docs/quickstart)
+The example uses the three connected-device policies above. Substitute the
+names you chose in both the build and install commands.
 
-**1. Get the pack and point it at your SDK.**
+### 1. Install the tools and clone the pack
+
+Install Nool and Rust. The Nool installer puts the policy SDK in `~/.nool/sdk`.
+Check the CLI and add the Rust target used to build the policies.
+[Nool installation](https://www.nool.dev/setup)
 
 ```sh
+nool --version
+rustup target add wasm32-unknown-unknown
 git clone https://github.com/noolinc/EmbeddedPack.git embedded-policy-pack
 cd embedded-policy-pack
+pack_dir="$PWD"
 ```
 
-Set the SDK path in `Cargo.toml` (`nool-aram-policy-sdk`) and in
-`crates/emb-policy-glue/Cargo.toml` (`nool-policy-abi`) to your
-`~/.nool/sdk/...` directories.
+The Cargo manifests use local SDK paths. In `Cargo.toml`, point
+`nool-aram-policy-sdk` at your SDK directory. In
+`crates/emb-policy-glue/Cargo.toml`, do the same for `nool-policy-abi`.
 
-**2. Choose your policies** from the table above. The commands below use the
-connected-device set as the example.
+### 2. Describe the board and build the policies
 
-**3. Describe your board.** Edit `hardware-profile.toml`. Use the real part's
-RAM and flash, the FPU your compiler flags enable, and your project's safety
-level. (If you chose only language, security and integrity policies, the
-safety level is the only part that matters.)
+Edit [hardware-profile.toml](hardware-profile.toml) in the pack clone. Set
+the board's RAM and flash, the FPU your compiler targets, and whether your
+application uses a superloop, an RTOS or an event loop. Set your heap policy
+and any applicable safety level. For example, the same 2 KiB stack object
+can fit one target's configured limit and exceed another's.
+[Hardware profile guide](docs/GUIDE.md#5-the-hardware-profile)
 
-**4. Build and check the ones you chose.**
+Run this from the pack clone. It runs the rule tests, builds the chosen
+policies, and tests them in throwaway Nool repositories. Look for
+`ALL CHECKS PASS` before moving on.
 
 ```sh
 tools/check.sh emb_security_baseline emb_firmware_integrity emb_runtime_safety
-# unit tests, WASM build, and a real end-to-end run of each named policy
 ```
 
-**5. Install into your firmware repository.**
+The build embeds the profile in the policy binaries. After changing it,
+rebuild and reinstall the policies.
+
+### 3. Install into your firmware repository
+
+Stay in the same shell so `pack_dir` is still set. Change into your firmware
+repository and run `nool init` if it has never used Nool. On Enterprise builds
+that require an editor contract for this key, run
+`nool admin contract grant --role editor` before installing.
+[Nool quickstart](https://www.nool.dev/docs/quickstart)
 
 ```sh
-cd /path/to/your-firmware          # a Nool repository: run `nool init` if it is not one yet
-for p in emb_security_baseline emb_firmware_integrity emb_runtime_safety; do
-  nool admin plugin install /path/to/embedded-policy-pack/policy-src/$p/$p.toml --policy
+cd /path/to/your-firmware
+for policy in emb_security_baseline emb_firmware_integrity emb_runtime_safety; do
+  nool admin plugin install "$pack_dir/policy-src/$policy/$policy.toml" --policy
 done
+nool admin plugin list
 ```
 
-A policy judges each changed file whole, so old violations in a file surface
-on its next edit. That is the main reason to start small.
+Check that all three policies appear. Nool Community allows up to three
+policies, Team allows eleven, and Enterprise has no limit. Compiled policies
+and declarative rules share that allowance. [Aram policy reference](https://www.nool.dev/docs/policies) · [Nool editions](https://www.nool.dev/pricing)
 
-**6. Allow agents and name reviewers.**
+### 4. Check that a rule fires
+
+In a trial checkout of your firmware repository, use the commands below to
+propose a C file containing a fake password. This uses
+`emb_security_baseline` from the example. Nool should refuse the proposal
+with `EMB-SEC-001`. The last two commands clean up the temporary file and
+directory.
 
 ```sh
-nool admin contract grant --role editor     # lets agents propose changes (Enterprise builds)
+smoke_dir=$(mktemp -d ./embpack-smoke.XXXXXX)
+printf 'const char *wifi_password = "hunter2-factory";\n' > "$smoke_dir/smoke.c"
+nool propose --path "$smoke_dir/smoke.c" --intent "Check the firmware policy" \
+  --why "Verify that the security policy catches a fake password" --solidify
+rm "$smoke_dir/smoke.c"
+rmdir "$smoke_dir"
 ```
 
-Add each reviewer's public key to `[attestation] checker_keys` in `nool.toml`
-if you install `emb_safety_process`.
+If the file lands, pause before adopting the policy and check whether it is
+installed and active. [Check your installation](docs/GUIDE.md#8-checking-the-installation)
 
-**7. Prove the gate is live.** Propose something one of your policies refuses.
-For the set above, a hard-coded password:
+## Working with the policies
 
-```sh
-printf 'const char *wifi_password = "hunter2-factory";\n' > src/smoke.c
-nool propose --path src/smoke.c --intent "smoke" --why "check the gate" --solidify
-# refused with [EMB-SEC-001] ... credentials and keys shall not be hard-coded
-rm src/smoke.c
-```
+- **When a proposal is refused**, start with the rule ID and the named file.
+  For example, `EMB-RT-001` can point to a `printf()` inside a UART
+  interrupt handler. Move the printing into a thread, then propose the change
+  again. [Reading a refusal](docs/GUIDE.md#reading-a-refusal)
+- **When you need a deviation**, check whether the rule allows one. Put the
+  reason next to the code. With `emb_safety_process` installed, the change
+  can land locally and wait for a trusted reviewer to sign before you push.
+  Add reviewer public keys to `checker_keys` in the `[attestation]` section
+  of `nool.toml` before relying on that workflow.
+  [Getting a deviation approved](docs/GUIDE.md#getting-a-deviation-approved)
+- **When a change needs runtime validation**, keep your existing static
+  analyser, CI and hardware tests. The policies inspect changed files for
+  specific patterns. Use your build, tests and target measurements to check
+  behaviour, stack use and timing. [Firmware host tests and TLA+ checks](docs/GUIDE.md#reification-and-tla)
 
-From here, engineers and agents work as usual. [docs/GUIDE.md](docs/GUIDE.md)
-covers daily use, deviations, approval, each policy in detail, and adoption on
-an existing code base.
+## How this fits with Nool and Git
 
-See [Reification and TLA+](docs/GUIDE.md#reification-and-tla) for blocking
-firmware host tests, TLC model checks, and signed evidence before push.
+Nool can reserve files or symbols before people and agents edit them, run
+configured validation before a change lands, and save the results with the
+signed change record. The pack supplies eight sandboxed policies to Aram,
+Nool's policy engine. Landed changes are mirrored as ordinary Git commits,
+so your Git host, pull requests and CI stay in use.
+[Nool features](https://www.nool.dev/features) · [Governance docs](https://www.nool.dev/docs/governance)
 
-## A path for adoption
+You can use the pack from the CLI, with Claude Code, Codex or opencode, or
+with the bundled `nool code` agent. To inspect a landed change, run
+`nool evidence knot <id>`. To see approvals and other signed verdicts for it,
+run `nool attest show <id>`. To apply the same policy set across replicas,
+use `nool admin plugin pin` to record its hashes in `nool.toml`.
+[Nool coding agent docs](https://www.nool.dev/docs/nool-code)
 
-1. **Pilot (a day).** One repository, the three policies from your row of the
-   table. Run the smoke test, then work normally for two weeks.
-2. **Review what happened.** Which refusals caught real defects? Which rules
-   were deviated again and again? Drop a policy that costs more than it gives;
-   that is a normal outcome, not a failure.
-3. **Add one policy at a time**, only when a real problem calls for it: a
-   field failure, an audit finding, a customer requirement.
-4. **Close the loop** if you have a deviation process or a safety level: add
-   `emb_safety_process`, name your reviewers, and move approval from email
-   into signed attestations.
-5. **Make it yours.** Add your company's rules, your vendor's config keys and
-   your requirement-tag format. See [CONTRIBUTING.md](CONTRIBUTING.md).
+## More resources
 
-## What it is not
-
-The checks read the text of each changed file. They are fast and they catch
-what is visible there; they do not do type or data-flow analysis.
-
-- It is not a certified static analyser and not a compliance claim. Keep your
-  MISRA analyser, compiler warnings and tests in CI. The pack is the early
-  gate in front of them.
-- ISO 26262, IEC 62304, IEC 61508 and DO-178C are not cited clause by clause,
-  because their text is not free. They act through the safety level in the
-  profile. Every clause that is cited was checked against the document's text.
-- Stack depth, timing, image size and behaviour on the device still need their
-  own tools. [docs/GUIDE.md](docs/GUIDE.md) lists, per policy, what you must
-  still verify.
-
-## Repository map
-
-| Path | Contents |
-|---|---|
-| `hardware-profile.toml` | The target and safety level every policy is built against |
-| `crates/emb-rules/` | The rule engine: one module and one test set per policy, plain Rust, no Nool needed |
-| `crates/emb-policy-glue/` | Connects the rules to the Nool policy SDK |
-| `policy-src/` | One thin WASM policy crate per policy |
-| `policies/` | The built policies installed in this repository. All eight are installed here, because this is where they are developed and tested; a product repository should not copy that |
-| `tests/e2e/` | Real `nool propose` and `nool push` runs in throwaway repositories |
-| `tools/` | `check.sh`, `build-policies.sh`, `new-policy.py`, `make-catalog.py` |
-| `docs/GUIDE.md` | The engineer's guide |
-| `standards/` | Catalog of 199 embedded standards with source, edition and availability |
-
-## Contributing
-
-New rules, vendor config keys and false-positive fixes are welcome.
-[CONTRIBUTING.md](CONTRIBUTING.md) explains how to add a rule, what a change
-must pass, and how to land it.
+- [Engineer's guide](docs/GUIDE.md) for the full rule reference, hardware profiles and troubleshooting.
+- [Standards catalog](standards/CATALOG.md) for source documents and edition details.
+- [Rule engine](crates/emb-rules/) and [policy crates](policy-src/) for implementation details.
+- [End-to-end tests](tests/e2e/) for examples you can run against Nool.
+- [Contributing](CONTRIBUTING.md) for adding a rule or fixing a false positive.
+- [MIT license](LICENSE).
