@@ -2,13 +2,14 @@
 
 use crate::model::{Category, FileCtx, Finding, Pack, Rule, deviations};
 use crate::profile::Profile;
-use crate::{c_subset, cpp_subset};
+use crate::{c_subset, cpp_subset, resources};
 
 /// Every rule in every pack.
 pub fn all_rules() -> Vec<&'static Rule> {
     let mut v: Vec<&'static Rule> = Vec::new();
     v.extend(c_subset::RULES.iter());
     v.extend(cpp_subset::RULES.iter());
+    v.extend(resources::RULES.iter());
     v
 }
 
@@ -45,6 +46,7 @@ fn check_file(pack: Pack, path: &str, text: &str, profile: &Profile) -> Vec<Find
     match pack {
         Pack::CSubset => c_subset::run(&mut sink),
         Pack::CppSubset => cpp_subset::run(&mut sink),
+        Pack::Resources => resources::run(&mut sink),
         _ => {}
     }
     let devs = deviations(text);

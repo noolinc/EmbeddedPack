@@ -1,0 +1,7 @@
+name = "emb_resource_bounds"
+version = "0.1.0"
+plugin_type = "Policy"
+wasm_path = "emb_resource_bounds.wasm"
+wasm_hash = ""
+capabilities = []
+requires = []
