@@ -1,7 +1,7 @@
 commit_policy_hash: 2e8b563ff1a0f6d478257fc6a82b13ac853a3787b40d0cc00df2893e7522a5c1
 commit_policy_version: 1
 commit_template_hash: 686bd6f6d3f60a9716f8ca85195b61c4852e2e6d8a91cf7a01fc867d6252a9af
-intent: Add the emb_resource_bounds Aram policy (EMB-RES-001..006)
-knot_id: 2955b88e87fd2723087d6d5206b93440278f863c0e7c8e865a5a68ac3f55f1c5
-solidified_at: 1795199722434
-thread: embedded-standards-pack
+intent: Policy set: install policy-src/emb_resource_bounds/emb_resource_bounds.toml
+knot_id: 6ecbd4ad135e1e1567dbb6f4d04de709887440e3890c880f4027cd6621604875
+solidified_at: 1795199730052
+thread: main

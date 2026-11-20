@@ -1,0 +1,9 @@
+name = "emb_resource_bounds"
+version = "0.1.0"
+plugin_type = "Policy"
+wasm_path = "emb_resource_bounds.wasm"
+wasm_hash = "7c0ebb4078f7a3981210f01a64334fa065fd74787d9bab33eea59ca9a4d03079"
+capabilities = []
+requires = []
+signature = "bb6997d89b056665cb45fb4c782355fa7a9a0e0a30718fb82cce9eb05641bb727e2ec8db35e10851d5984f9c3e082004c9c8ababb3fd47fa808922260050e109"
+public_key = "39aa3ee8852f14d9edd9c286ce0a6ea6d507ae1b5c8f56bb9ff31b560544af4d"
