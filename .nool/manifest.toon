@@ -1,7 +1,7 @@
 commit_policy_hash: 2e8b563ff1a0f6d478257fc6a82b13ac853a3787b40d0cc00df2893e7522a5c1
 commit_policy_version: 1
 commit_template_hash: 686bd6f6d3f60a9716f8ca85195b61c4852e2e6d8a91cf7a01fc867d6252a9af
-intent: Add the emb_hardware_fit Aram policy (EMB-HW-001..006)
-knot_id: b9de764dff18da225715f8148af456689af64352f3c0e24ba85a6483ba433897
-solidified_at: 1795199923152
-thread: embedded-standards-pack
+intent: Policy set: install policy-src/emb_hardware_fit/emb_hardware_fit.toml
+knot_id: 7eeb10187d60301c56c3ae7279ddc4cb265dc341cc26c74ce10779ac0b96d130
+solidified_at: 1795199931669
+thread: main

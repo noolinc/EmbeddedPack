@@ -1,0 +1,9 @@
+name = "emb_hardware_fit"
+version = "0.1.0"
+plugin_type = "Policy"
+wasm_path = "emb_hardware_fit.wasm"
+wasm_hash = "d923ca57515066631cfae7a05897dbd1dee714d5b93451d0ec77132fa36af05b"
+capabilities = []
+requires = []
+signature = "d0beddd70594df4465f8f13c0c81d3fe0b2d32c657830b4ff2c1c9776579b8a666704860da046793edd1117466e509e6cab58f37fafb4a76b3d19971fbc50704"
+public_key = "39aa3ee8852f14d9edd9c286ce0a6ea6d507ae1b5c8f56bb9ff31b560544af4d"
