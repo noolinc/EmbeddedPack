@@ -308,6 +308,102 @@ at the start of a task, so it writes fitting code first time. And review any
 deviation an agent writes as carefully as its code: the push gate exists
 because writing a plausible reason is easy.
 
+### Reification and TLA+
+
+#### Run firmware host tests before landing
+
+In a CMake firmware probe, Nool 8.0.0 compiled the proposed C change,
+reported `no tests ran (.c)`, and let a regression land. To run your host
+suite during full validation, add a blocking check to `nool.toml`:
+
+```toml
+[[reification.checks]]
+name = "host-tests"
+command = ["sh", "-c", "cmake -S . -B build >/dev/null && cmake --build build >/dev/null && ctest --test-dir build --output-on-failure --no-tests=error"]
+pass_files = false
+mode = "block"
+timeout_secs = 300
+```
+
+Use your project's host build options and register the tests with CTest.
+`command` is an argument array. `pass_files = false` prevents Nool from
+appending changed file names. CTest's `--no-tests=error` also fails the
+check if the host configuration registers zero tests.
+
+Review the commands and run `nool code trust` in each clone. Renew trust when
+Nool asks after a configuration change. An untrusted clone warns and skips
+these checks even in `block` mode. In the trusted probe, a failing C assertion
+refused the proposal and appeared in the output. Land changes to `nool.toml`
+in their own proposal with an explicit `--justification`.
+
+Each custom command has its own `timeout_secs` budget. Nool 8.0.0's schema
+lists a 300-second default, and a one-second blocking check in the probe
+refused the proposal when the command timed out. Set the budget explicitly
+for slow builds. The built-in integrity driver reported a separate
+120-second timeout floor and supports the `NOOL_INTEGRITY_TIMEOUT_SECS`
+override.
+
+#### Run TLC on a small model
+
+Keep the model and its finite configuration in the firmware repository.
+With TLC on the proposing machine's `PATH`, add a second check:
+
+```toml
+[[reification.checks]]
+name = "tla-model-check"
+command = ["tlc", "-config", "specs/Ring.cfg", "specs/Ring.tla"]
+pass_files = false
+mode = "block"
+```
+
+In the probe, TLC 2.19 allowed a finite ring-index model with wraparound.
+Removing wraparound violated `InBounds` at index 4 for a four-slot ring.
+TLC exited 12 and Nool refused the proposal with the counterexample.
+This verifies the invariant over the finite model. Host tests still check
+the C implementation.
+
+Without an extension filter, Nool ran TLC on both C and model proposals.
+`extensions = ["tla", "cfg"]` limited the check to proposals touching those
+extensions and skipped a C-only change. Custom checks in the probe also
+saw the checkout's unproposed edits, including a dirty `Ring.cfg`. Use a
+clean checkout apart from the proposed inputs when validating locally.
+
+#### Require signed TLC evidence before push
+
+Use the blocking local check for fast models. For slower runs or enforcement
+on specific source paths, have a trusted runner check the exact landed knot
+and require its signed result before push. Merge these settings into the
+existing tables in `nool.toml`:
+
+```toml
+[attestation]
+enforce = "block"
+checker_keys = ["ed25519:<runner-public-key-hex>"]
+
+[attestation.obligations]
+"src/**" = ["tla-model-check"]
+"specs/**" = ["tla-model-check"]
+```
+
+Replace the key placeholder and narrow the paths to the code and specs your
+model covers. The probe could land locally, but `nool push` refused matching
+knots with missing evidence, including earlier unsent knots. Inspect each
+knot with `nool attest obligations <knot>`.
+
+Give the runner access to the knot before the gated push, for example through
+a separate staging checkout. Run TLC on that knot and record a pass only
+after TLC succeeds. With the signing key supplied through `NOOL_IDENTITY_KEY`,
+a runner with the local ledger can use:
+
+```sh
+nool attest record --target "$knot" --checker ci --assertion tla-model-check \
+    --verdict pass --scope full
+```
+
+Deliver the signed attestation to the pushing clone before retrying the push.
+For a remote runner, the signed-ref exchange follows the workflow in
+[Getting a deviation approved](#getting-a-deviation-approved).
+
 ## 7. The policies
 
 Each section gives the rules, how the check decides, and what you must still

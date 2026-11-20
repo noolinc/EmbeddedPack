@@ -303,6 +303,9 @@ From here, engineers and agents work as usual. [docs/GUIDE.md](docs/GUIDE.md)
 covers daily use, deviations, approval, each policy in detail, and adoption on
 an existing code base.
 
+See [Reification and TLA+](docs/GUIDE.md#reification-and-tla) for blocking
+firmware host tests, TLC model checks, and signed evidence before push.
+
 ## A path for adoption
 
 1. **Pilot (a day).** One repository, the three policies from your row of the
