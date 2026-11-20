@@ -12,6 +12,7 @@ pub mod lex;
 pub mod model;
 pub mod profile;
 pub mod resources;
+pub mod security;
 
 pub use engine::{check, deviatable, render, rule_by_id};
 pub use model::{Category, Finding, Pack, Rule};
