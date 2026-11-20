@@ -15,10 +15,9 @@ file and line, and the clause it enforces:
 | `emb_resource_bounds` | EMB-RES-001..006 | Heap (per profile), recursion, alloca/VLA, loop bounds, function length, pointer depth |
 | `emb_hardware_fit` | EMB-HW-001..006 | Fit to `hardware-profile.toml`: stack objects vs RAM, FPU, flash, exceptions, execution model |
 | `emb_security_baseline` | EMB-SEC-001..011 | ETSI EN 303 645, CWE: secrets, weak crypto, unbounded copies, TLS verification, cleartext |
-
-Not built yet: `emb_runtime_safety` (ISRs, critical sections, watchdog),
-`emb_firmware_integrity` (build flags, secure boot, update), `emb_safety_process`
-(traceability, deviation approval).
+| `emb_runtime_safety` | EMB-RT-001..005 | BARR-C 6.5, NASA-GB-8719.13 4.6, CERT CON33-C: blocking calls in ISRs, interrupts left disabled, non-reentrant library calls, watchdog disabled or fed from an ISR |
+| `emb_firmware_integrity` | EMB-FWI-001..007 | NIST SP 800-193, SP 800-218, UN R156, EN 303 645: silenced warnings, removed hardening, secure boot / rollback protection off, development signing keys, unauthenticated build downloads, open debug access |
+| `emb_safety_process` | EMB-PRC-001..007 | MISRA Compliance:2020, NASA NPR 7150.2D: analysis suppressions, requirement traces, disabled tests, malformed deviations, weakened `.clang-tidy`, approval before push |
 
 ## Hardware profile
 
@@ -45,6 +44,24 @@ strict (goto, heap, recursion, VLA, all security rules) cannot be deviated.
   at least 20 characters. Mandatory rules are never waived.
 
       /* EMB-DEVIATION(EMB-C-001): single cleanup exit, approved in DR-7 */
+
+## Approval before push
+
+`emb_safety_process` also runs at `nool push`. A knot is held as pending
+evidence (exit 3) until a trusted key has attested it:
+
+| The knot | Needs a trusted `pass` for |
+|---|---|
+| carries a deviation that waives a rule | `emb-deviation-review` |
+| changes `hardware-profile.toml` | `emb-profile-review` |
+
+    nool attest record --target <knot> --checker <reviewer> --assertion emb-deviation-review --verdict pass
+
+A key is trusted when it is listed in `[attestation] checker_keys` in
+`nool.toml`. An attestation signed by any other key, including the author's
+own, does not release the push. On a profile with a safety level (ASIL A+,
+IEC 62304 class B+, SIL 1+) every production source file that defines
+functions needs a requirement tag in a comment, for example `@req SRS-123`.
 
 ## Standards
 
