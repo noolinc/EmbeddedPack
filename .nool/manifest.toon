@@ -1,7 +1,7 @@
 commit_policy_hash: 2e8b563ff1a0f6d478257fc6a82b13ac853a3787b40d0cc00df2893e7522a5c1
 commit_policy_version: 1
 commit_template_hash: 686bd6f6d3f60a9716f8ca85195b61c4852e2e6d8a91cf7a01fc867d6252a9af
-intent: Policy set: install policy-src/emb_c_subset/emb_c_subset.toml
-knot_id: ebebde915a3ff41304943d208ad66c1378844f45d1fa9d5f1554f8e21e0b543a
-solidified_at: 1795199442423
-thread: main
+intent: Add the standards catalog and download manifest
+knot_id: 6e6db6165251122dfdddb8c376fde076c6e2892b00db59a05df6b552595aeabd
+solidified_at: 1795199466322
+thread: embedded-standards-pack
