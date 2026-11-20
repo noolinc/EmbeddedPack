@@ -58,7 +58,10 @@ independent reviewer before push) -- MISRA Compliance:2020 4.1
   | waiting for a trusted `emb-deviation-review` pass)
 ```
 
-The author's own signature does not release it.
+The author's own signature does not release it. The reviewer pulls the held
+change from the author's repository, signs it on their own machine, and
+pushes only the approval; the change itself reaches the shared branch after
+that. ([How approval works](docs/GUIDE.md#getting-a-deviation-approved).)
 
 ## What you get
 

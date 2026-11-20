@@ -6,7 +6,8 @@
 source "$(dirname "$0")/lib.sh"
 setup_repo emb_safety_process
 REMOTE="$WORK.remote.git"
-trap 'rm -rf "$WORK" "$REMOTE"' EXIT
+REVIEWER="$WORK.reviewer"
+trap 'rm -rf "$WORK" "$REMOTE" "$REVIEWER"' EXIT
 mkdir -p src tests
 
 printf '/* @req SRS-1 */\nint f(int a)\n{\n    return a; // NOLINT\n}\n' > src/a.c
@@ -51,4 +52,31 @@ OUT="$(nool propose --path nool.toml --intent "trust the reviewer key" --why "e2
 OUT="$(nool push origin 2>&1)"; RC=$?
 ok=0; [ "$RC" -eq 0 ] && echo "$OUT" | grep -q "Pushed" && ok=1
 step "push goes through once a trusted key approved" $ok
+
+# The reviewer works in their own clone. The held change is not on the
+# remote, so they pull it from the author's repository, sign, and push only
+# the approval; the author fetches it and pushes the change.
+printf '/* @req SRS-2 */\nint g(int a)\n{\n    /* EMB-DEVIATION(EMB-PRC-001): second vendor macro, see DR-4 */\n    return a; // NOLINT\n}\n' > src/g.c
+expect_landed "second deviation" src/g.c
+KNOT2="$(echo "$OUT" | grep -o 'Landed knot [0-9a-f]*' | awk '{print $3}')"
+OUT="$(nool push origin 2>&1)"; RC=$?
+ok=0; [ "$RC" -eq 3 ] && ok=1
+step "push held: second deviation" $ok
+
+AUTHOR="$PWD"
+git clone -q "$REMOTE" "$REVIEWER" && cd "$REVIEWER" && nool init >/dev/null 2>&1
+OUT="$(nool pull "$AUTHOR" 2>&1)"; RC=$?
+ok=0; [ "$RC" -eq 0 ] && grep -q "second vendor macro" src/g.c && ok=1
+step "reviewer pulls the held change from the author's repository" $ok
+OUT="$(nool attest record --target "$KNOT2" --checker reviewer --assertion emb-deviation-review --verdict pass --environment local --push origin 2>&1)"; RC=$?
+ok=0; [ "$RC" -eq 0 ] && ! git --git-dir="$REMOTE" log main -- src/g.c | grep -q "DR-4" && ! git --git-dir="$REMOTE" show main:src/g.c 2>/dev/null | grep -q "DR-4" && ok=1
+step "reviewer pushes the approval only; the change is still not on the remote branch" $ok
+
+cd "$AUTHOR"
+OUT="$(nool attest wait "$KNOT2" --assertion emb-deviation-review --remote origin --timeout-secs 60 2>&1)"; RC=$?
+ok=0; [ "$RC" -eq 0 ] && echo "$OUT" | grep -q "trusted" && ok=1
+step "author receives the approval from the remote" $ok
+OUT="$(nool push origin 2>&1)"; RC=$?
+ok=0; [ "$RC" -eq 0 ] && echo "$OUT" | grep -q "Pushed" && git --git-dir="$REMOTE" show main:src/g.c 2>/dev/null | grep -q "DR-4" && ok=1
+step "push goes through after the reviewer's approval arrives" $ok
 finish

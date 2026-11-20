@@ -221,14 +221,72 @@ goto cleanup;
 ### Getting a deviation approved
 
 With `emb_safety_process` installed, a change that carries a deviation lands
-locally, but `nool push` holds it (exit code 3, "evidence pending") until a
-reviewer whose key is trusted records:
+in the author's repository, but `nool push` holds it (exit code 3, "evidence
+pending") until a reviewer whose key is trusted has attested
+`emb-deviation-review` on it. A change to `hardware-profile.toml` needs
+`emb-profile-review` in the same way.
 
-    nool attest record --target <knot> --checker <reviewer> --assertion emb-deviation-review --verdict pass
+The held change is not on the shared remote, so the reviewer cannot get it
+from there. The reviewer takes it from the author instead, and sends back only
+the signature:
 
-A change to `hardware-profile.toml` needs `--assertion emb-profile-review` in
-the same way. An attestation from a key that is not in `checker_keys`,
-including the author's own, does not release the push.
+```
+ author's repository          reviewer's repository             shared remote
+ ───────────────────          ─────────────────────             ─────────────
+ 1. change lands locally
+ 2. nool push  → held (exit 3)
+        │
+        └──── 3. nool pull <author's repository> ──▶ has the change
+                 4. reads the code and the deviation
+                 5. nool attest record … --push origin ─────▶ approval only
+ 6. nool attest wait <knot> --remote origin  ◀──────────────── approval
+ 7. nool push origin ────────────────────────────────────────▶ change
+```
+
+**Author**, after the push is held: tell the reviewer the knot id (it is in
+the refusal message) and where your repository is.
+
+**Reviewer**, in their own clone:
+
+```sh
+nool pull <author's repository>      # an SSH URL, a path on a shared machine, or a git bundle file
+nool review <knot> --diff            # read the change and the deviation
+nool attest record --target <knot> --checker <your name> \
+    --assertion emb-deviation-review --verdict pass --push origin
+```
+
+`--push origin` sends the signed approval to the shared remote. It does not
+send the change: the branch on the remote is untouched until the author
+pushes.
+
+**Author**, once the reviewer has signed:
+
+```sh
+nool attest wait <knot> --assertion emb-deviation-review --remote origin
+nool push origin
+```
+
+Things to know:
+
+- **Getting the change to the reviewer** is the one step that needs a route
+  between the two people. `nool pull` reads any Git transport: SSH to the
+  author's machine, a path on a shared build server, or a file made with
+  `git bundle create review.bundle --all` and sent by any means.
+- **A reviewer who rejects** records `--verdict fail` with a comment
+  (`nool review <knot> --comment "…"`). The push stays held. The author fixes
+  the code in a new change; the approval is needed on the change that carries
+  the deviation.
+- **An approval is for one exact change.** Edit the file again and the new
+  change needs its own approval.
+- **A key is trusted** when it is listed in `[attestation] checker_keys` in
+  `nool.toml`. An attestation from any other key, including the author's own,
+  does not release the push. Do not put an author's key in that list for
+  changes they write, and never an agent's.
+- **Small teams.** If only one person can review, pushes with deviations wait
+  for that person. That is the intended cost; if it is too high for your
+  project, do not install `emb_safety_process`.
+- **A reviewer on the author's machine** (pairing, or a shared workstation)
+  can sign there directly with their own key, without the pull.
 
 Reviewer's questions: Is the rule really unavoidable here? Does the reason
 match a deviation record? Is the risk assessed and are the precautions in the
@@ -613,7 +671,8 @@ rm src/smoke.c
 | A refusal mentions values you changed in the profile | Policies were not rebuilt and reinstalled after the edit |
 | "Reification failed" on a C file | Nool also compiles proposed C/C++ files; that is the compiler, not the pack |
 | An agent's edit is refused as unauthorised | No editor contract: `nool admin contract grant --role editor` |
-| `nool push` exits 3 forever | No trusted reviewer key, or the approval was signed by an untrusted key. Check `checker_keys` and `nool attest show <knot>` |
+| `nool push` exits 3 forever | No trusted reviewer key, the approval was signed by an untrusted key, or it has not been fetched yet (`nool attest wait <knot> --remote origin`). Check `checker_keys` and `nool attest show <knot>` |
+| The reviewer cannot find the change on the remote | A held change is never on the remote. The reviewer pulls it from the author's repository (section 6, "Getting a deviation approved") |
 | A task function is refused for `for (;;)` or an init function for `malloc` | Its name does not follow the conventions in 7.3 |
 | An ISR that blocks is not refused | Its name or attribute is not recognised (7.6) |
 | A false positive | Deviate it with the reason, and report it; the rule's test file is the place to add the case |
