@@ -319,13 +319,14 @@ suite during full validation, add a blocking check to `nool.toml`:
 ```toml
 [[reification.checks]]
 name = "host-tests"
-command = ["sh", "-c", "cmake -S . -B build >/dev/null && cmake --build build >/dev/null && ctest --test-dir build --output-on-failure --no-tests=error"]
+command = ["sh", "-c", "cmake -S . -B build >/dev/null && cmake --build build --clean-first >/dev/null && ctest --test-dir build --output-on-failure --no-tests=error"]
 pass_files = false
 mode = "block"
 timeout_secs = 300
 ```
 
 Use your project's host build options and register the tests with CTest.
+`--clean-first` prevents the check from reusing objects from a prior proposal.
 `command` is an argument array. `pass_files = false` prevents Nool from
 appending changed file names. CTest's `--no-tests=error` also fails the
 check if the host configuration registers zero tests.
