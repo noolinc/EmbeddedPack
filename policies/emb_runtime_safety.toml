@@ -1,0 +1,9 @@
+name = "emb_runtime_safety"
+version = "0.1.0"
+plugin_type = "Policy"
+wasm_path = "emb_runtime_safety.wasm"
+wasm_hash = "f7b148c7cc0c6149fabc16dd3a92b1ffba6f62160789a4d277e9483e29253b71"
+capabilities = []
+requires = []
+signature = "301f4d0c723332d5ff0f75984b653b70f775810430883e37dbff0e707fee56dc459abb81c8d498c0bcef9f542a5f32c1e45627efd1972bed13ce9db2ad93ff01"
+public_key = "39aa3ee8852f14d9edd9c286ce0a6ea6d507ae1b5c8f56bb9ff31b560544af4d"
