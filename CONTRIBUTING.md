@@ -121,7 +121,7 @@ float checks, so:
 If the right answer depends on the target, read it from `cx.profile` and test
 at least two profiles. Add a profile key only when no existing one fits: add
 it to `Profile::parse` in `profile.rs`, to `hardware-profile.toml` with a
-comment, and to section 4 of the guide.
+comment, and to section 5 of the guide.
 
 ## Adding a vendor's config keys or API names
 
@@ -141,8 +141,9 @@ name comes from.
    (`setup_repo`, `expect_refused`, `expect_landed`, `finish`). Nool compiles
    proposed C and C++ files, so fixtures must be self-contained, compilable
    code: declare what you call.
-5. Add a section 6.x to `docs/GUIDE.md` with the rule table, "How it decides"
-   and "Verify yourself", and a row to the README table.
+5. Add a section 7.x to `docs/GUIDE.md` with the rule table, "How it decides"
+   and "Verify yourself", a row in each table of section 3 (when to install it,
+   what it costs), and a row to the README table.
 
 ## Updating the guide
 

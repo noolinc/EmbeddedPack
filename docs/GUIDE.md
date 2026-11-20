@@ -2,7 +2,7 @@
 
 This guide is for embedded software engineers who work in a Nool-tracked
 firmware repository where the pack is installed, and for the lead who sets it
-up. It covers what the pack does for you, how to set it up, how to work with
+up. It covers what the pack does for you, which policies to choose, how to set it up, how to work with
 it day to day, what each of the eight policies checks, and what you still have
 to verify yourself.
 
@@ -30,16 +30,88 @@ The same gate applies to a person and to an AI agent. One policy also runs at
 What it is not: a certified static analyser, or a compliance claim. The checks
 read the text of the changed files. Keep your MISRA analyser, compiler
 warnings and tests in CI; the pack is the early, cheap gate in front of them.
-Section 8 lists exactly what stays your job.
+Section 9 lists exactly what stays your job.
 
-## 3. Set-up (once per repository)
+## 3. Choose your policies
+
+Do not install all eight. Each policy you add is another set of rules every
+change must pass, and on an existing code base each one surfaces old findings
+in every file you touch. Pick the two or three that address the risks your
+project actually has, run with them for a few weeks, and add more only when a
+real problem calls for it.
+
+### Start from your project
+
+| Your project | Start with | Add later if needed | Usually skip |
+|---|---|---|---|
+| **Small bare-metal MCU in C** (superloop, kilobytes of RAM, no network) | `emb_hardware_fit`, `emb_resource_bounds`, `emb_c_subset` | `emb_runtime_safety` when interrupt code grows | `emb_cpp_subset`, `emb_security_baseline` |
+| **RTOS firmware in C** (tasks, drivers, interrupts) | `emb_runtime_safety`, `emb_resource_bounds`, `emb_hardware_fit` | `emb_c_subset` | `emb_cpp_subset` |
+| **Connected / IoT device** (Wi-Fi, BLE, cellular, OTA update) | `emb_security_baseline`, `emb_firmware_integrity`, `emb_runtime_safety` | `emb_hardware_fit` | Language subsets, unless a customer asks for MISRA |
+| **Safety-related C** (automotive, medical, industrial; ASIL / class / SIL assigned) | `emb_c_subset`, `emb_resource_bounds`, `emb_safety_process` | `emb_runtime_safety`, `emb_hardware_fit` | `emb_cpp_subset` |
+| **C++ application firmware** | `emb_cpp_subset`, `emb_resource_bounds`, `emb_hardware_fit` | `emb_runtime_safety` | `emb_c_subset` (but see the note on `.h` files) |
+| **Bootloader or update component** | `emb_firmware_integrity`, `emb_security_baseline`, `emb_c_subset` | `emb_resource_bounds` | `emb_safety_process` unless the project has a safety level |
+| **Large legacy code base** | `emb_firmware_integrity`, `emb_runtime_safety`, `emb_security_baseline` | One language or resource policy per quarter, after a baseline clean-up | `emb_c_subset` / `emb_cpp_subset` at first: they fire on most old files |
+| **Team that relies heavily on AI agents** | Your project's row above, plus `emb_safety_process` | | |
+
+These are starting points, not a classification. A motor controller with a
+CAN bootloader is two rows; take what applies from each.
+
+### Or start from the problem you have
+
+| The problem you keep having | Policy |
+|---|---|
+| Code that works on the dev kit and overflows the stack or the flash on the real part | `emb_hardware_fit` |
+| Heap fragmentation, recursion, or loops that never end in the field | `emb_resource_bounds` |
+| Hard faults and hangs traced to interrupt handlers or a disabled watchdog | `emb_runtime_safety` |
+| A customer or auditor asking for MISRA C or AUTOSAR C++ evidence | `emb_c_subset` or `emb_cpp_subset`, with `emb_safety_process` for deviations |
+| Credentials, test keys or `http://` endpoints reaching a release | `emb_security_baseline` |
+| A release built with secure boot off, warnings silenced, or the development key | `emb_firmware_integrity` |
+| Suppressed warnings, skipped tests and waivers nobody approved | `emb_safety_process` |
+
+### What each policy costs
+
+| Policy | Install it when | Leave it out when | Needs from you | Findings on existing code |
+|---|---|---|---|---|
+| `emb_c_subset` | You follow, or must show, a C subset such as MISRA C or BARR-C | The code is C++, or mostly vendor HAL you will not rewrite | Nothing | Many: unbraced bodies, missing `default`, `<stdio.h>` |
+| `emb_cpp_subset` | Your firmware is C++ and you follow AUTOSAR C++14 or a similar subset | The code is C | Nothing | Many: C-style casts, plain enums, `NULL` |
+| `emb_resource_bounds` | No heap, or a strict memory and loop discipline | A Linux-class device with ample memory where heap use is normal (or set `heap = "allowed"`) | `heap`, `max_function_lines`; task and init functions named by convention | Some: long functions, `malloc`, `for (;;)` in oddly named functions |
+| `emb_hardware_fit` | The part is small, has no or a single-precision FPU, or the execution model is strict | RAM and flash are generous and you use an FPU with double precision | An accurate profile; rebuild after each change to it | Depends on the part: on a small MCU, some; on a large one, few |
+| `emb_security_baseline` | The device has any interface an attacker can reach, or holds keys | A sealed device with no communication and no secrets | Nothing | Some: `strcpy`, `sprintf`, `rand`; mandatory findings for any committed secret |
+| `emb_runtime_safety` | You write interrupt handlers or use an RTOS | No interrupts of your own and no watchdog (rare) | ISRs named or attributed by convention; `execution_model` | Few |
+| `emb_firmware_integrity` | You ship signed or updatable firmware, or want compiler warnings kept on | No build files in the repository | Nothing | Few |
+| `emb_safety_process` | You have a deviation process, a safety level, or agents that might suppress findings | No reviewers available to sign approvals: pushes would wait forever | Reviewer keys in `checker_keys`; with a safety level, a requirement tag in every source file | Few without a safety level; with one, every untagged source file |
+
+### Things to know before you choose
+
+- **A policy is all or nothing.** There is no switch to turn one rule off.
+  If a single rule does not fit your project, deviate it where it fires, or
+  remove it from the policy's `RULES` list and rebuild (see
+  `CONTRIBUTING.md`). If most of a policy does not fit, do not install it.
+- **`.h` files are judged as C.** `emb_cpp_subset` checks `.hpp`, `.hh` and
+  `.hxx` headers but not `.h`. In a C++ project with `.h` headers, either
+  rename them or accept that those headers are outside the C++ rules; and do
+  not install `emb_c_subset` there, or it will judge them as C.
+- **The hardware profile matters only to some policies.** `emb_hardware_fit`,
+  `emb_resource_bounds`, `emb_runtime_safety` and `emb_safety_process` read
+  it. The safety level in it also decides, for every policy, whether strict
+  rules can still be deviated. If you install only the language, security and
+  integrity policies, the hardware keys can stay at their defaults.
+- **`emb_safety_process` is the only one that acts at push.** Without it,
+  deviations in the other policies work, but nobody has to approve them.
+- **Edition limits.** Nool's Community edition loads up to 3 policies, Team
+  up to 11. Three is a sensible number to start with in any case.
+- **Removing a policy is allowed.** If one costs more than it gives,
+  `nool admin plugin uninstall <name> --policy` takes it out. That is a recorded
+  change, which is the point: the rule set is a decision, made in the open.
+
+## 4. Set-up (once per repository)
 
 Prerequisites: Nool 7.30 or later, a Rust toolchain, and the Nool policy SDK
 in `~/.nool/sdk` (the workspace `Cargo.toml` and
 `crates/emb-policy-glue/Cargo.toml` point at it by path; change the paths if
 yours is elsewhere).
 
-1. **Describe the target.** Edit `hardware-profile.toml` (section 4). This is
+1. **Describe the target.** Edit `hardware-profile.toml` (section 5). This is
    the most important step: a wrong profile gives wrong refusals.
 2. **Build.** `tools/build-policies.sh` runs the unit tests and builds every
    policy to WASM.
@@ -52,26 +124,24 @@ yours is elsewhere).
    `[attestation] checker_keys` in `nool.toml` and land it (a `nool.toml`
    change needs `--justification`). `nool attest record` prints the signer's
    key. Without a trusted key, changes that need approval can never be pushed.
-6. **Check the installation** (section 7).
+6. **Check the installation** (section 8).
 
-You do not have to install all eight. A C-only project can leave out
-`emb_cpp_subset`; a project without a safety process can leave out
-`emb_safety_process`.
+Install only the policies you chose in section 3.
 
 ### Adopting on an existing code base
 
 A policy judges each changed file as a whole. A file with old violations is
 refused on its next edit, whatever the edit was. Plan for it:
 
-- Install one policy at a time, starting with `emb_security_baseline` and
-  `emb_firmware_integrity`, which rarely fire on healthy code.
+- Install one policy at a time, starting with the ones section 3 lists as
+  having few findings on existing code.
 - Before installing a policy, run its rules over the tree and fix or deviate
   what it finds. The rule engine is a plain Rust library
   (`emb_rules::check`), so a small script can do this without Nool.
 - Move adopted code under `third_party/`, `vendor/` or `external/`; those
   paths are exempt.
 
-## 4. The hardware profile
+## 5. The hardware profile
 
 ```toml
 [hardware]
@@ -112,7 +182,7 @@ bad value is refused (EMB-HW-006), and a profile change needs an
 There is one profile per repository. A repository that builds for two boards
 should use the more constrained board's values.
 
-## 5. Daily work
+## 6. Daily work
 
 ### Reading a refusal
 
@@ -180,12 +250,12 @@ at the start of a task, so it writes fitting code first time. And review any
 deviation an agent writes as carefully as its code: the push gate exists
 because writing a plausible reason is easy.
 
-## 6. The policies
+## 7. The policies
 
 Each section gives the rules, how the check decides, and what you must still
 verify, because a text-level check cannot see it.
 
-### 6.1 `emb_c_subset`: C language subset
+### 7.1 `emb_c_subset`: C language subset
 
 Files: production `.c` and `.h`.
 
@@ -224,7 +294,7 @@ Verify yourself:
   lightweight logger, name it something else; do not deviate `<stdio.h>`
   everywhere.
 
-### 6.2 `emb_cpp_subset`: C++ language subset
+### 7.2 `emb_cpp_subset`: C++ language subset
 
 Files: production C++ sources and headers (`.cpp`, `.cc`, `.cxx`, `.hpp`,
 `.hh`, `.ino`, …).
@@ -261,7 +331,7 @@ Verify yourself:
   are not seen.
 - Exception policy is in `emb_hardware_fit` (EMB-HW-004), not here.
 
-### 6.3 `emb_resource_bounds`: memory, stack and loops
+### 7.3 `emb_resource_bounds`: memory, stack and loops
 
 Files: production C and C++.
 
@@ -295,7 +365,7 @@ Verify yourself:
 - Name your task and init functions by the conventions above, or the heap and
   loop rules will misjudge them.
 
-### 6.4 `emb_hardware_fit`: fit to the target
+### 7.4 `emb_hardware_fit`: fit to the target
 
 Files: production C and C++, plus `hardware-profile.toml` itself.
 
@@ -335,7 +405,7 @@ Verify yourself:
   seen by EMB-HW-002.
 - Timing: nothing here proves a deadline is met.
 
-### 6.5 `emb_security_baseline`: device security
+### 7.5 `emb_security_baseline`: device security
 
 Files: production C and C++; `KEY=value` lines in build, config and script
 files.
@@ -376,7 +446,7 @@ Verify yourself:
   update policy, user data deletion). The pack covers the ones visible in
   source.
 
-### 6.6 `emb_runtime_safety`: interrupts, critical sections, watchdog
+### 7.6 `emb_runtime_safety`: interrupts, critical sections, watchdog
 
 Files: production C and C++; watchdog keys in Kconfig-style files.
 
@@ -417,7 +487,7 @@ Verify yourself:
 - The watchdog is fed from the right place: after a real health check of all
   tasks, with a timeout that matches your fault-reaction time.
 
-### 6.7 `emb_firmware_integrity`: build and boot chain
+### 7.7 `emb_firmware_integrity`: build and boot chain
 
 Files: production build files (Makefile, CMake, `*.mk`, `platformio.ini`, …),
 config files (`sdkconfig*`, `prj.conf`, `*.conf`, YAML), scripts, and two
@@ -459,7 +529,7 @@ Verify yourself:
   rollback counter working. Test on hardware.
 - Downloads over https are accepted without a checksum. Pin hashes.
 
-### 6.8 `emb_safety_process`: process evidence
+### 7.8 `emb_safety_process`: process evidence
 
 Files: all production and test files except third-party; `.clang-tidy`.
 
@@ -501,7 +571,7 @@ Verify yourself:
 - The deviation record itself (risk assessment, precautions) lives in your
   quality system; the comment only points to it.
 
-## 7. Checking the installation
+## 8. Checking the installation
 
 Run these after set-up, after every profile change, and after every Nool
 upgrade.
@@ -523,7 +593,7 @@ nool propose --path src/smoke.c --intent "smoke" --why "check the gate" --solidi
 rm src/smoke.c
 ```
 
-## 8. What stays your responsibility
+## 9. What stays your responsibility
 
 | Area | Why the pack cannot do it | Use |
 |---|---|---|
@@ -535,7 +605,7 @@ rm src/smoke.c
 | Existing code | Only changed files are judged | A one-time baseline run before adoption |
 | Tool qualification | The pack is not qualified under any standard | Treat it as an aid, not as evidence in a safety case |
 
-## 9. Troubleshooting
+## 10. Troubleshooting
 
 | Symptom | Cause and fix |
 |---|---|
@@ -544,11 +614,11 @@ rm src/smoke.c
 | "Reification failed" on a C file | Nool also compiles proposed C/C++ files; that is the compiler, not the pack |
 | An agent's edit is refused as unauthorised | No editor contract: `nool admin contract grant --role editor` |
 | `nool push` exits 3 forever | No trusted reviewer key, or the approval was signed by an untrusted key. Check `checker_keys` and `nool attest show <knot>` |
-| A task function is refused for `for (;;)` or an init function for `malloc` | Its name does not follow the conventions in 6.3 |
-| An ISR that blocks is not refused | Its name or attribute is not recognised (6.6) |
+| A task function is refused for `for (;;)` or an init function for `malloc` | Its name does not follow the conventions in 7.3 |
+| An ISR that blocks is not refused | Its name or attribute is not recognised (7.6) |
 | A false positive | Deviate it with the reason, and report it; the rule's test file is the place to add the case |
 
-## 10. Reference
+## 11. Reference
 
 - Rule source and tests: `crates/emb-rules/src/` (one module per policy).
 - All rules as tables: `cargo run -p emb-rules --example rule_table`.
