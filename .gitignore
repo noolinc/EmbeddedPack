@@ -4,6 +4,7 @@
 !.nool/knot.bin
 !.nool/manifest.toon
 .nool/cache/
+.nool/carriers/
 .nool/tmp/
 .nool/try/
 .nool/target/
