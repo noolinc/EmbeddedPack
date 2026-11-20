@@ -1,7 +1,7 @@
 commit_policy_hash: 2e8b563ff1a0f6d478257fc6a82b13ac853a3787b40d0cc00df2893e7522a5c1
 commit_policy_version: 1
 commit_template_hash: 686bd6f6d3f60a9716f8ca85195b61c4852e2e6d8a91cf7a01fc867d6252a9af
-intent: Policy set: install policy-src/emb_security_baseline/emb_security_baseline.toml
-knot_id: 6067aa1ea0778fffcbbe206edcc836ef54db14c4059fa665260fb68099022391
-solidified_at: 1795200220623
-thread: main
+intent: Add the README for the policy pack
+knot_id: d2a62d3e56154710b94a13c9e10f8913543dbb2ec190b93d4447cfbeec015607
+solidified_at: 1795200256197
+thread: embedded-standards-pack
