@@ -22,7 +22,7 @@ rules! {
     SETJMP = "EMB-C-002", true, "setjmp/longjmp shall not be used",
         "MISRA C:2012 Rule 21.4; Power of 10 Rule 1";
     ATOX = "EMB-C-003", false, "atof, atoi, atol and atoll shall not be used",
-        "MISRA C:2012 Rule 21.7; SEI CERT C ERR34-C";
+        "MISRA C:2012 Rule 21.7";
     TERMINATION = "EMB-C-004", false, "abort, exit, _Exit, quick_exit and getenv shall not be used",
         "MISRA C:2012 Rule 21.8";
     SIGNAL = "EMB-C-005", false, "the facilities of <signal.h> shall not be used",
