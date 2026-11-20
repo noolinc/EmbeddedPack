@@ -1,5 +1,7 @@
 # Embedded Policy Pack for Nool
 
+![A microcontroller development board wired to a logic analyzer on an electronics bench](docs/images/embedded-workbench.webp)
+
 Add firmware rules to the changes you review in [Nool](https://www.nool.dev/).
 For example, the pack can catch a print call in an interrupt handler, a
 hard-coded Wi-Fi password, or a build flag that disables secure boot. Nool
@@ -156,6 +158,39 @@ with the bundled `nool code` agent. To inspect a landed change, run
 run `nool attest show <id>`. To apply the same policy set across replicas,
 use `nool admin plugin pin` to record its hashes in `nool.toml`.
 [Nool coding agent docs](https://www.nool.dev/docs/nool-code)
+
+## Real firmware bugs and the checks that could catch them
+
+Each of these failures needs a project-specific test. Nool can make the
+test result a condition of landing or pushing the change.
+
+- **Mars Pathfinder repeatedly reset under load.** A high-priority task
+  waited on a lock held by a lower-priority task that was kept from running.
+  JPL enabled priority inheritance to fix it. Reproduce the scheduling
+  sequence in an RTOS stress test and check the high-priority task's deadline.
+  Require a signed pass from the target test runner before pushing scheduler
+  or lock changes. [Glenn Reeves's firsthand account](https://retis.santannapisa.it/~giorgio/mars/reeves.html)
+- **A Boeing 787 generator-control counter could overflow after 248 days of
+  continuous power.** The FAA described a risk that the generator control
+  units could enter failsafe mode together. A host test can place the counter
+  just below its limit, advance through the overflow boundary, and check the
+  controller's required behaviour. Run it as a blocking Nool check on every
+  relevant proposal. [FAA directive](https://www.federalregister.gov/documents/2015/05/01/2015-10066/airworthiness-directives-the-boeing-company-airplanes)
+- **A Zephyr STM32 UART could leave too much time between bytes.** The
+  reported driver behaviour waited for transmission to finish before
+  interrupting to queue more data. On an STM32H563, a Zephyr Twister test
+  with a board fixture could exercise the timer-to-UART interrupt handoff,
+  measure the largest gap on the wire, and check that the last byte finishes
+  and TX interrupts stop after disable. Require the board runner's signed
+  result before push. [Zephyr issue #125432](https://github.com/zephyrproject-rtos/zephyr/issues/125432) · [Twister device testing](https://docs.zephyrproject.org/latest/develop/twister/index.html#running-tests-on-hardware)
+
+One check already ships with this pack. `emb_runtime_safety` refuses a
+`printf()` call inside a recognised interrupt handler with `EMB-RT-001`.
+The end-to-end test checks that refusal through a real Nool proposal.
+[Runtime safety test](tests/e2e/emb_runtime_safety.sh)
+
+For checks that need a test runner, see how to run a blocking host check or
+require a signed test result from CI. [Setting up validation gates](docs/GUIDE.md#reification-and-tla)
 
 ## More resources
 
