@@ -8,6 +8,7 @@ pub mod c_subset;
 pub mod cpp_subset;
 pub mod engine;
 pub mod hardware;
+pub mod integrity;
 pub mod lex;
 pub mod model;
 pub mod profile;

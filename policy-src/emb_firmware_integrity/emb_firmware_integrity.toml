@@ -1,0 +1,7 @@
+name = "emb_firmware_integrity"
+version = "0.1.0"
+plugin_type = "Policy"
+wasm_path = "emb_firmware_integrity.wasm"
+wasm_hash = ""
+capabilities = []
+requires = []

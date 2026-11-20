@@ -216,6 +216,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "emb_firmware_integrity"
+version = "0.1.0"
+dependencies = [
+ "emb-policy-glue",
+ "emb-rules",
+ "nool-aram-policy-sdk",
+]
+
+[[package]]
 name = "emb_hardware_fit"
 version = "0.1.0"
 dependencies = [
