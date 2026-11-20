@@ -1,0 +1,11 @@
+[package]
+name = "emb-policy-glue"
+description = "Bridges emb-rules to the Nool Aram policy SDK"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+emb-rules.workspace = true
+nool-aram-policy-sdk.workspace = true
+nool-policy-abi = { path = "/Users/arunbalakrishnan/.nool/sdk/nool-policy-abi" }

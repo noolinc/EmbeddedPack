@@ -1,0 +1,13 @@
+[package]
+name = "emb_c_subset"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+emb-policy-glue.workspace = true
+emb-rules.workspace = true
+nool-aram-policy-sdk.workspace = true

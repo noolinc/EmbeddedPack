@@ -1,0 +1,19 @@
+[workspace]
+resolver = "3"
+members = ["crates/emb-rules", "crates/emb-policy-glue", "policy-src/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[workspace.dependencies]
+emb-rules = { path = "crates/emb-rules" }
+emb-policy-glue = { path = "crates/emb-policy-glue" }
+# The Nool installer puts the SDK here; `nool admin plugin init` writes the same path.
+nool-aram-policy-sdk = { path = "/Users/arunbalakrishnan/.nool/sdk/nool-aram-policy-sdk" }
+
+[profile.release]
+opt-level = "s"
+lto = true
+strip = true

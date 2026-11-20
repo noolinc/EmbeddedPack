@@ -6,3 +6,7 @@
 .nool/nool.db-journal
 .nool/knots/
 nool_proposal.tmp
+
+standards/specs/
+target/
+policy-src/*/*.wasm

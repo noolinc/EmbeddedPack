@@ -1,0 +1,21 @@
+# The hardware and safety context every policy is built against.
+# A policy cannot read the repository from its sandbox, so this file is
+# compiled in: after editing it, rebuild and reinstall with tools/build-policies.sh.
+
+[hardware]
+name = "generic-cortex-m4"
+arch = "armv7e-m"
+ram_bytes = 65536        # also accepts 64k / 1m
+flash_bytes = 262144
+fpu = "single"           # none | single | double
+
+[architecture]
+execution_model = "rtos" # superloop | rtos | event-driven
+heap = "none"            # none | init-only | allowed
+max_stack_object_bytes = 0   # 0 = RAM/64, clamped to 64..4096
+max_function_lines = 60
+
+[safety]
+iso26262_asil = "B"      # QM | A | B | C | D
+iec62304_class = "B"     # none | A | B | C
+iec61508_sil = 2         # 0..4
