@@ -1,7 +1,7 @@
 commit_policy_hash: 2e8b563ff1a0f6d478257fc6a82b13ac853a3787b40d0cc00df2893e7522a5c1
 commit_policy_version: 1
 commit_template_hash: 686bd6f6d3f60a9716f8ca85195b61c4852e2e6d8a91cf7a01fc867d6252a9af
-intent: Grant editor to 39aa3ee8 over everywhere, valid 365 day(s)
-knot_id: ac8223316ff1e8a5c1efd327a654b7888f704183ca42b4868c1e94c74f087efd
-solidified_at: 1795199065433
-thread: 
+intent: Policy set: install policy-src/emb_c_subset/emb_c_subset.toml
+knot_id: eab0c9d7f6d730fd51649315f9c7a001d3a8dc6c0f3b93b2c3ccfedb61c6822f
+solidified_at: 1795199066805
+thread: main
