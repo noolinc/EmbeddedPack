@@ -6,6 +6,8 @@ file and line, and the clause it enforces:
 
     [EMB-C-001] src/smoke.c:3: goto (goto shall not be used) -- MISRA C:2012 Rule 15.1; BARR-C:2018 1.7c; Power of 10 Rule 1
 
+Engineers using the pack: read [docs/GUIDE.md](docs/GUIDE.md).
+
 ## Policies
 
 | Policy | Rules | Enforces |

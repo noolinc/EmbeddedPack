@@ -993,6 +993,22 @@
   "title": "ISO/PAS 8800:2024 Road vehicles - Safety and artificial intelligence"
  },
  {
+  "bytes": 1786772,
+  "domain": "functional-safety/automotive",
+  "download_url": "https://fscdn.rohm.com/en/products/databook/white_paper/iso26262_wp-e.pdf",
+  "edition": "white paper, covers ISO 26262 Edition 2 (2018)",
+  "file": "standards/specs/rohm-iso26262-white-paper/iso26262_wp-e.pdf",
+  "id": "rohm-iso26262-white-paper",
+  "license_note": "copyright ROHM; free PDF from publisher; do not redistribute",
+  "notes": "Vendor overview of ISO 26262 (systematic vs random failures, changes in Edition 2, Part 11 semiconductors, ROHM's process). Secondary source: contains no Part 6 clause numbers or method tables, so it corroborates no rule citation.",
+  "official_url": "https://fscdn.rohm.com/en/products/databook/white_paper/iso26262_wp-e.pdf",
+  "pages": 15,
+  "publisher": "ROHM",
+  "sha256": "d8db3aee764c3e02cbd651da246195d24b43dfc593aacd5b6e9e2f30f39a17a7",
+  "status": "downloaded",
+  "title": "ISO 26262: Functional Safety Standard for Modern Road Vehicles (white paper)"
+ },
+ {
   "bytes": null,
   "domain": "functional-safety/autonomy",
   "download_url": null,
