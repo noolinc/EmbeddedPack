@@ -1,0 +1,9 @@
+name = "emb_cpp_subset"
+version = "0.1.0"
+plugin_type = "Policy"
+wasm_path = "emb_cpp_subset.wasm"
+wasm_hash = "442c251d365cf95b584756e20d1e3480627534dc732fe5185f63a6187e5e1414"
+capabilities = []
+requires = []
+signature = "a0198eb5ac6a1b7ddc6a9dc753380536eeaa9dcacbaffaf196e0280db5557b679c87775188c03aabe148a250d0d77b24e028d9b8395f5f2f75aaba4a4a8fc103"
+public_key = "39aa3ee8852f14d9edd9c286ce0a6ea6d507ae1b5c8f56bb9ff31b560544af4d"
