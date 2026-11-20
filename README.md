@@ -166,9 +166,9 @@ What Aram provides that the pack depends on:
 Nool's Community edition loads up to 3 policies, Team up to 11, and Enterprise
 has no limit. Three is the right number to start with on any edition.
 
-## Why not a pre-commit hook or a linter?
+## Why not a pre-commit hook, a linter or a unit test?
 
-Both are worth having, and neither can do this job. The difference is not the
+All three are worth having, and none of them can do this job. The difference is not the
 rules; it is who is able to switch them off.
 
 **A Git pre-commit hook is a request.**
@@ -196,11 +196,43 @@ has ended, and the fix becomes a second change and a second review.
 | Knows the language, not your board | Reads RAM, flash, FPU, heap policy, execution model and safety level from the hardware profile |
 | Judges code only | Also judges build flags, boot configuration, CI scripts, test files and the analyser's own configuration |
 
+**A unit test answers a different question.**
+
+A test asks "does this code give the right output for the inputs I thought
+of?" A policy asks "is this change allowed to exist in this product?" Much of
+what goes wrong in firmware passes its tests:
+
+| The change | Its unit tests | Aram |
+|---|---|---|
+| `printf` in an interrupt handler | Pass: on the host there is no interrupt context, and on the bench it works most of the time | Refused (EMB-RT-001) |
+| `malloc` in a control loop on a part with no heap budget | Pass: the host has gigabytes | Refused (EMB-RES-001) |
+| `double` arithmetic on a single-precision FPU | Pass: the result is correct, only slow | Refused (EMB-HW-002) |
+| A 2 KB buffer on a 1 KB task stack | Pass: the host stack is megabytes | Refused (EMB-HW-001) |
+| Secure boot switched off in the release config | Pass, and faster | Refused (EMB-FWI-003) |
+| A Wi-Fi password in the source | Pass: it connects | Refused (EMB-SEC-001) |
+
+Three further limits:
+
+- **A test covers the code it was written for.** Someone must write a test
+  for each function and remember each hazard. A rule is written once and
+  applies to every file and every future change, including code nobody
+  thought to test.
+- **The author controls the test.** The person or agent who writes the code
+  also writes, edits, skips or deletes its test. A failing test is one
+  `DISABLED_` or `TEST_IGNORE()` away from green.
+- **A test proves nothing until something runs it and acts on the result.**
+  That is again a hook or a CI job, with the limits above.
+
+Tests remain the only way to show the code does what it should, and this pack
+checks none of that. They work together here too: Nool builds a change and
+runs its tests before it lands, and `emb_safety_process` refuses a change that
+disables or skips a test (EMB-PRC-003).
+
 A real analyser still sees far more than this pack does: types, data flow,
-macro expansion, the full MISRA rule set. Keep it. The two work together: the
-analyser finds deep defects in CI, and Aram makes sure nobody, human or AI,
-can turn the analyser down, skip its tests or suppress its findings without a
-signed approval.
+macro expansion, the full MISRA rule set. Keep it, and keep your tests. The
+analyser finds deep defects and the tests prove behaviour; Aram makes sure
+nobody, human or AI, can turn the analyser down, skip the tests or suppress
+a finding without a signed approval.
 
 ## Set up in your firmware repository
 
