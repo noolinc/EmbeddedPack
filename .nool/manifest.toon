@@ -1,7 +1,7 @@
 commit_policy_hash: 2e8b563ff1a0f6d478257fc6a82b13ac853a3787b40d0cc00df2893e7522a5c1
 commit_policy_version: 1
 commit_template_hash: 686bd6f6d3f60a9716f8ca85195b61c4852e2e6d8a91cf7a01fc867d6252a9af
-intent: Drop the unverified CERT ERR34-C citation from EMB-C-003
-knot_id: 1f8534dac87dd6c67ff6797b077f73f99e137924b45edafcad4d08f5acaebd2a
-solidified_at: 1795199432537
-thread: embedded-standards-pack
+intent: Policy set: install policy-src/emb_c_subset/emb_c_subset.toml
+knot_id: ebebde915a3ff41304943d208ad66c1378844f45d1fa9d5f1554f8e21e0b543a
+solidified_at: 1795199442423
+thread: main
