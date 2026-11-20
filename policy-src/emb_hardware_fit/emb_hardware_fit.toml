@@ -1,0 +1,7 @@
+name = "emb_hardware_fit"
+version = "0.1.0"
+plugin_type = "Policy"
+wasm_path = "emb_hardware_fit.wasm"
+wasm_hash = ""
+capabilities = []
+requires = []
