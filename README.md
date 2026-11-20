@@ -66,13 +66,25 @@ The Cargo manifests use local SDK paths. In `Cargo.toml`, point
 `nool-aram-policy-sdk` at your SDK directory. In
 `crates/emb-policy-glue/Cargo.toml`, do the same for `nool-policy-abi`.
 
-### 2. Describe the board and build the policies
+### 2. Check the hardware profile and build the policies
 
-Edit [hardware-profile.toml](hardware-profile.toml) in the pack clone. Set
-the board's RAM and flash, the FPU your compiler targets, and whether your
-application uses a superloop, an RTOS or an event loop. Set your heap policy
-and any applicable safety level. For example, the same 2 KiB stack object
-can fit one target's configured limit and exceed another's.
+Edit only the settings your chosen policies use in
+[`hardware-profile.toml`](hardware-profile.toml) in the pack clone.
+
+| Policy | Settings to check |
+|---|---|
+| `emb_hardware_fit` | RAM, flash, FPU, execution model, heap policy and stack-object limit |
+| `emb_resource_bounds` | Heap policy and maximum function length |
+| `emb_runtime_safety` | Execution model. This controls the check for non-reentrant calls. |
+| `emb_safety_process` | Safety classification. It determines when production code needs requirement tags. |
+| `emb_c_subset`, `emb_cpp_subset`, `emb_security_baseline`, `emb_firmware_integrity` | The board and architecture settings can stay as shipped. |
+
+**Check `[safety]` separately.** Every policy uses the safety classification
+when deciding whether a strict rule can be waived. The sample uses ASIL B,
+IEC 62304 class B and SIL 2, which activate requirement tracing when
+`emb_safety_process` is installed. Use your project's actual levels. If your
+project has no assigned levels, omit the `[safety]` section or set the entries
+to `"QM"`, `"none"` and `0`, respectively.
 [Hardware profile guide](docs/GUIDE.md#5-the-hardware-profile)
 
 Run this from the pack clone. It runs the rule tests, builds the chosen
@@ -83,8 +95,12 @@ policies, and tests them in throwaway Nool repositories. Look for
 tools/check.sh emb_security_baseline emb_firmware_integrity emb_runtime_safety
 ```
 
-The build embeds the profile in the policy binaries. After changing it,
-rebuild and reinstall the policies.
+Every policy binary embeds this file when it is built. Keep it in the pack
+clone for the build. The firmware repository can use the installed binaries
+without a copy of the TOML file. To apply new settings, rebuild and reinstall
+your selected policies. If `emb_safety_process` is installed in the repository
+where you commit a profile change, it requires an `emb-profile-review`
+approval before push.
 
 ### 3. Install into your firmware repository
 
