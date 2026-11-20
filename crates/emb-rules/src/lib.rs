@@ -5,6 +5,7 @@
 //! the Aram WASM sandbox.
 
 pub mod c_subset;
+pub mod cpp_subset;
 pub mod engine;
 pub mod lex;
 pub mod model;

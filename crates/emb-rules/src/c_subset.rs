@@ -239,8 +239,22 @@ fn clause_terminated(cx: &FileCtx, colon: usize, stop: usize) -> bool {
     let mut k = e;
     let mut head = e;
     while let Some(p) = cx.prev(k) {
-        if p <= colon || t[p].is(";") || t[p].is("{") || t[p].is("}") {
+        if p <= colon || t[p].is(";") || t[p].is("{") {
             break;
+        }
+        if t[p].is("}") {
+            // `Err{}` is part of the expression; any other `}` ends a statement.
+            let init = cx.pair(p).filter(|&o| o > colon).and_then(|o| cx.prev(o).map(|b| (o, b))).filter(|&(_, b)| {
+                t[b].is(">") || (t[b].kind == Kind::Ident && !matches!(t[b].text, "else" | "do" | "try"))
+            });
+            match init {
+                Some((o, _)) => {
+                    k = o;
+                    head = k;
+                    continue;
+                }
+                None => break,
+            }
         }
         k = if t[p].is(")") || t[p].is("]") { cx.pair(p).unwrap_or(p) } else { p };
         head = k;

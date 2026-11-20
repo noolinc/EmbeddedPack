@@ -1,7 +1,7 @@
 commit_policy_hash: 2e8b563ff1a0f6d478257fc6a82b13ac853a3787b40d0cc00df2893e7522a5c1
 commit_policy_version: 1
 commit_template_hash: 686bd6f6d3f60a9716f8ca85195b61c4852e2e6d8a91cf7a01fc867d6252a9af
-intent: Policy set: install policy-src/emb_c_subset/emb_c_subset.toml
-knot_id: eab0c9d7f6d730fd51649315f9c7a001d3a8dc6c0f3b93b2c3ccfedb61c6822f
-solidified_at: 1795199066805
-thread: main
+intent: Add the emb_cpp_subset Aram policy (EMB-CPP-001..018)
+knot_id: bda75cee3377e62369c9f2c2b0bdf3096e4612bfa3b567a4d9bed0da84aa62ae
+solidified_at: 1795199326332
+thread: embedded-standards-pack

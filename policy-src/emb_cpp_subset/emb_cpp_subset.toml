@@ -1,0 +1,7 @@
+name = "emb_cpp_subset"
+version = "0.1.0"
+plugin_type = "Policy"
+wasm_path = "emb_cpp_subset.wasm"
+wasm_hash = ""
+capabilities = []
+requires = []
