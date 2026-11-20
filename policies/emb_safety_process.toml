@@ -1,0 +1,9 @@
+name = "emb_safety_process"
+version = "0.1.0"
+plugin_type = "Policy"
+wasm_path = "emb_safety_process.wasm"
+wasm_hash = "8cdc649457456005c7686b590159c9d6a1bd4b137e758a18bb646f680a31ecfd"
+capabilities = []
+requires = []
+signature = "121ac7087b33cf42a4755caecc05f8db12f9af4223b077c083cdb44402dcbbf67a070edc9271caa1b9d8ce4889c0b5e565a200c4d35ec8a5a9389f8764a37a0d"
+public_key = "39aa3ee8852f14d9edd9c286ce0a6ea6d507ae1b5c8f56bb9ff31b560544af4d"
