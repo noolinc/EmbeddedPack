@@ -17,6 +17,20 @@ tools/check.sh
 It must end with `ALL CHECKS PASS` before you change anything. If it does
 not, fix your set-up first.
 
+### Getting a Nool licence to contribute
+
+This repository has all eight policies installed, which is more than the
+Community edition loads, so working on it needs the Enterprise edition. If you
+want to contribute and do not have it, ask for a contributor licence by email
+at **help@nool.dev**. Include:
+
+- **Your background**: your embedded or tooling experience, and the standards
+  you work with.
+- **Your purpose**: what you want to add or fix (a rule, a vendor's config
+  keys, a false positive, a new policy).
+- **Your previous open-source contributions**: links to repositories, pull
+  requests or patches you have made elsewhere.
+
 This repository is tracked by Nool. Do not use `git commit` or `git push`;
 they are blocked. Changes land with `nool propose` (see "Landing").
 
