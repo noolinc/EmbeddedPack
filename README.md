@@ -6,7 +6,8 @@ MISRA, BARR-C, AUTOSAR C++14, Power of 10, ETSI EN 303 645, NIST SP 800-193:
 every embedded team has the rules. The hard part is keeping them while the code
 changes every day, under schedule pressure, and now with AI agents writing a
 growing share of it. This pack turns 79 of those rules into eight policies
-that [Nool](#why-nool) runs on every change, for every author, human or AI.
+that [Nool](https://www.nool.dev/) runs on every governed change, for human
+and agent authors alike.
 You install the two or three policies your project needs. A change that
 breaks one of their rules does not land.
 
@@ -139,35 +140,31 @@ be deviated at all.
 
 ## Why Nool
 
-Nool is a version-control system built for changes made by people and agents
-together. Its policy engine is **Aram (Added Rules and Measures)**: every
-change passes through a stack of policies, each one a WASM component running
-in a safety sandbox, before it can become history. This pack is eight Aram
-policies.
+Nool adds coordination, policy checks and signed evidence to a Git workflow.
+Landed changes are mirrored as ordinary Git commits, so your Git host, pull
+requests and CI stay in use. Engineers can work from the CLI, with agents such
+as Claude Code, Codex or opencode, or with Nool's bundled `nool code` agent.
+[Nool features](https://www.nool.dev/features) · [Coding agent docs](https://www.nool.dev/docs/nool-code)
 
-What Aram provides that the pack depends on:
+- **Coordinate before editing.** Declare the files or symbols a task will touch.
+  A lease makes overlapping work visible while agents are still planning.
+- **Check before landing.** Nool can run builds and tests during validation.
+  This pack adds eight compiled WebAssembly policies to Nool's Aram policy
+  engine. Those policies check proposed changes in a sandbox with bounded
+  execution and no filesystem or network access. Both engineers and agents
+  see the same rule IDs and refusal messages.
+- **Record evidence and gate publication.** Nool signs each landed change,
+  called a *knot*. Use `nool evidence knot <id>` to inspect its checks and
+  `nool attest show <id>` to see attestations. With `emb_safety_process`
+  installed, a change carrying a deviation or a hardware-profile edit can
+  land locally and wait for trusted approval before push.
+  [Governance and audit docs](https://www.nool.dev/docs/governance)
 
-- **A gate before history.** Policies run when a change is proposed, when it
-  is sealed, and when it is pushed. A refused change never becomes a commit.
-  Landed changes are mirrored to Git, so the rest of your toolchain keeps
-  working.
-- **A safety sandbox.** A policy has no file system and no network.
-  It gets the change and returns a verdict, inside fixed fuel and memory
-  limits with strict floating-point checks. The same change gets the same
-  verdict on every machine, and a policy cannot leak or alter your source. If
-  a policy fails to run, the change is blocked, not waved through.
-- **A pinned, replicated rule set.** Each policy's hash is pinned in
-  `nool.toml` and travels with the repository. Changing or removing a policy
-  is itself a signed, justified change in the history. It cannot happen
-  quietly on one laptop.
-- **One gate for every author.** A person's change and an agent's change go
-  through the same policies and get the same refusal text.
-- **Signed evidence.** Changes and reviewer attestations are signed, and trust
-  comes from keys listed in the repository. That is what makes deviation
-  approval real.
-
-Nool's Community edition loads up to 3 policies, Team up to 11, and Enterprise
-has no limit. Three is the right number to start with on any edition.
+To enforce a consistent policy set across replicas, pin the installed policy
+hashes in `nool.toml` with `nool admin plugin pin`. The edition limits count
+compiled WASM policies and declarative rules together. Community loads up to 3,
+Team up to 11, and Enterprise has no limit.
+[Aram policy reference](https://www.nool.dev/docs/policies) · [Nool editions](https://www.nool.dev/pricing)
 
 ## Why not a pre-commit hook, a linter or a unit test?
 
@@ -239,14 +236,16 @@ a finding without a signed approval.
 
 ## Set up in your firmware repository
 
-You need Nool, a Rust toolchain with the WASM target
-(`rustup target add wasm32-unknown-unknown`), and the Nool policy SDK that the
-Nool installer places in `~/.nool/sdk`.
+Install the Nool CLI and verify it with `nool --version`. To build the pack,
+you also need a Rust toolchain with `rustup target add wasm32-unknown-unknown`
+and the policy SDK that the Nool installer places in `~/.nool/sdk`.
+[Install Nool](https://www.nool.dev/setup) · [Nool quickstart](https://www.nool.dev/docs/quickstart)
 
 **1. Get the pack and point it at your SDK.**
 
 ```sh
-git clone <this repository> embedded-policy-pack && cd embedded-policy-pack
+git clone https://github.com/noolinc/EmbeddedPack.git embedded-policy-pack
+cd embedded-policy-pack
 ```
 
 Set the SDK path in `Cargo.toml` (`nool-aram-policy-sdk`) and in
