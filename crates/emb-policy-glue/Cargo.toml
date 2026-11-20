@@ -3,6 +3,7 @@ name = "emb-policy-glue"
 description = "Bridges emb-rules to the Nool Aram policy SDK"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 publish.workspace = true
 
 [dependencies]

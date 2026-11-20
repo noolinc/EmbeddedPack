@@ -5,6 +5,7 @@ members = ["crates/emb-rules", "crates/emb-policy-glue", "policy-src/*"]
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
+license = "MIT"
 publish = false
 
 [workspace.dependencies]
