@@ -1,7 +1,7 @@
 commit_policy_hash: 2e8b563ff1a0f6d478257fc6a82b13ac853a3787b40d0cc00df2893e7522a5c1
 commit_policy_version: 1
 commit_template_hash: 686bd6f6d3f60a9716f8ca85195b61c4852e2e6d8a91cf7a01fc867d6252a9af
-intent: nool init: record Nool's configuration files
-knot_id: 1d1273bdb1c38a09e60c391eac72c7df9682a9035e76cb36af0f9996df4d61d1
-solidified_at: 1795197541377
-thread: main
+intent: Create thread 'embedded-standards-pack'
+knot_id: f7445519f3f4775b6b2d3743189e907373a7749a2afe4c2353cb3aff8d6dfed4
+solidified_at: 1795198224714
+thread: embedded-standards-pack
