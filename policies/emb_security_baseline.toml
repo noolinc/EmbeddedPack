@@ -1,0 +1,9 @@
+name = "emb_security_baseline"
+version = "0.1.0"
+plugin_type = "Policy"
+wasm_path = "emb_security_baseline.wasm"
+wasm_hash = "13687ff149f07891526a397b12840e7257fdbe236ab3413db2cf4dceb92331da"
+capabilities = []
+requires = []
+signature = "3bf576cd8b71f9aa93702dcc914fb01cf92e1ed85d17e0d6c1cf90ed34d1fcc4ebae8b268f07f8fbdae8cd75ae6cf1f812a09bc5724e85d769787bd0ab3ef30d"
+public_key = "39aa3ee8852f14d9edd9c286ce0a6ea6d507ae1b5c8f56bb9ff31b560544af4d"
