@@ -46,6 +46,8 @@ pub struct Profile {
     pub iec62304_class: u8,
     /// IEC 61508 / EN 50128 SIL, 0..=4.
     pub sil: u8,
+    /// Files larger than this are not analysed (`[analysis] max_file_bytes`).
+    pub max_file_bytes: u64,
 }
 
 impl Default for Profile {
@@ -62,6 +64,7 @@ impl Default for Profile {
             asil: 0,
             iec62304_class: 0,
             sil: 0,
+            max_file_bytes: 2 * 1024 * 1024,
         }
     }
 }
@@ -151,6 +154,7 @@ impl Profile {
                         _ => return Err(bad()),
                     }
                 }
+                "analysis.max_file_bytes" => p.max_file_bytes = num(v).filter(|n| *n > 0).ok_or_else(bad)?,
                 "safety.iec61508_sil" => p.sil = num(v).filter(|s| *s <= 4).ok_or_else(bad)? as u8,
                 _ => return Err(format!("line {}: unknown key {key}", n + 1)),
             }
@@ -219,5 +223,13 @@ mod tests {
         assert!(Profile::parse("[hardware]\nrom = 1").is_err());
         assert!(Profile::parse("[architecture]\nheap = \"some\"").is_err());
         assert!(Profile::parse("[safety]\niec61508_sil = 9").is_err());
+        assert!(Profile::parse("[analysis]\nmax_file_bytes = 0").is_err());
+    }
+
+    #[test]
+    fn max_file_bytes_defaults_to_2_mib_and_parses_units() {
+        assert_eq!(Profile::default().max_file_bytes, 2 * 1024 * 1024);
+        let p = Profile::parse("[analysis]\nmax_file_bytes = 8m").unwrap();
+        assert_eq!(p.max_file_bytes, 8 * 1024 * 1024);
     }
 }

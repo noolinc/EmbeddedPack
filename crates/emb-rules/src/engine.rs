@@ -39,11 +39,8 @@ impl Sink<'_, '_> {
     }
 }
 
-/// Files larger than this are not analysed: a policy has a fixed fuel budget.
-pub const MAX_FILE_BYTES: usize = 2 * 1024 * 1024;
-
 fn check_file(pack: Pack, path: &str, text: &str, profile: &Profile) -> Vec<Finding> {
-    if text.len() > MAX_FILE_BYTES || text.as_bytes().iter().take(4096).any(|b| *b == 0) {
+    if text.len() as u64 > profile.max_file_bytes || text.as_bytes().iter().take(4096).any(|b| *b == 0) {
         return Vec::new();
     }
     let cx = FileCtx::new(path, text, profile);
@@ -106,4 +103,18 @@ pub fn render(findings: &[Finding], profile: &Profile) -> (String, String) {
     }
     evidence.push_str(&format!("profile: {}", profile.summary()));
     (message, evidence)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_file_over_max_file_bytes_is_skipped_until_the_limit_is_raised() {
+        let src = format!("void f(void) {{ goto out; out: return; }}\n{}", "/* pad */\n".repeat(200));
+        let small = Profile { max_file_bytes: 64, ..Profile::default() };
+        assert!(check(Pack::CSubset, &[("src/a.c", &src)], &small).is_empty());
+        let large = Profile { max_file_bytes: src.len() as u64, ..Profile::default() };
+        assert!(check(Pack::CSubset, &[("src/a.c", &src)], &large).iter().any(|f| f.rule.id == "EMB-C-001"));
+    }
 }

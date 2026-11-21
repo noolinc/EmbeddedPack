@@ -298,7 +298,7 @@ code? Is the deviation as narrow as it can be?
 |---|---|
 | `test/`, `tests/`, `unittest/`, `mocks/`, `testing/`, `test_*`, `*_test.*` | Exempt from all rules except disabled-test detection (EMB-PRC-003) |
 | `third_party/`, `vendor/`, `external/`, `extern/`, `node_modules/` | Exempt from everything |
-| Files over 2 MB, binary files | Not analysed |
+| Files over `[analysis] max_file_bytes` in `hardware-profile.toml` (default 2 MB), binary files | Not analysed |
 
 ### Working with an AI agent
 
