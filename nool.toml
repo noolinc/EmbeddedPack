@@ -273,6 +273,17 @@ host_detection_failure = "warn"
 
 [consortium]
 
+# embedded-safety-review: two-model council gating safety-critical changes.
+# Claude Sonnet (Bedrock) + DeepSeek V3.2 thinking (Bedrock, veto-capable).
+[consortium.embedded-safety-review]
+members = [
+    "bedrock:us.anthropic.claude-sonnet-5-5",
+    "bedrock:deepseek.v3.2",
+    "!bedrock:deepseek.v3.2#thinking",
+]
+quorum = 0.5
+budget_usd = 0.50
+
 [soul]
 
 [eval_set]
@@ -376,8 +387,8 @@ net_egress = "deny"
 allow_low_confidence = false
 
 [code]
-default_model = "anthropic/claude-sonnet-5"
-default_backend = "openrouter"
+default_model = "us.anthropic.claude-sonnet-5-5"
+default_backend = "bedrock"
 default_mode = "suggest"
 budget_usd = 2.0
 max_rounds = 40
@@ -399,3 +410,6 @@ browser = false
 browser_no_sandbox = false
 
 [code.models]
+builder     = { model = "us.anthropic.claude-sonnet-5-5", backend = "bedrock" }
+reviewer    = { model = "deepseek.v3.2", backend = "bedrock", variant = "thinking" }
+coordinator = { model = "us.anthropic.claude-sonnet-5-5", backend = "bedrock" }
