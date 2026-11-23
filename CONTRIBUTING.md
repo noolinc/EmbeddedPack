@@ -6,9 +6,15 @@ the rule claims. The process below exists to keep that true.
 
 ## Before you start
 
-You need Nool, Rust with `wasm32-unknown-unknown`, and the Nool policy SDK
-(`~/.nool/sdk`). Set the SDK path in `Cargo.toml` and
-`crates/emb-policy-glue/Cargo.toml`, then run:
+You need Nool 8.0.2 or later, Rust with `wasm32-unknown-unknown`, and the
+Nool policy SDK (`~/.nool/sdk`). If you haven't used Nool before, read
+[Nool basics](docs/GUIDE.md#nool-basics) first. This repository is itself
+tracked by Nool, so you land changes with `nool propose`, not `git commit`.
+
+Both `Cargo.toml` and `crates/emb-policy-glue/Cargo.toml` refer to the SDK by
+absolute path. Point them at yours with the `sed` command in
+[step 1 of the README](README.md#1-install-the-tools-and-clone-the-pack),
+then run:
 
 ```sh
 tools/check.sh
@@ -193,7 +199,15 @@ nool announce intent --intent "<what>" --target-nodes <paths>
 nool propose --path <file> [--path <file>…] \
     --intent "Add EMB-RT-006: <requirement>" \
     --why "<the defect it prevents, and the clause>" --solidify
+nool push origin
 ```
+
+`announce` tells other contributors and agents which files you are editing,
+so two people don't change the same rule at once. `propose --solidify` runs
+the build, the tests and the installed policies, and lands the change only if
+all of them pass. A refusal saves nothing, so fix the cause (see the table
+below) and run the same command again. `push` sends your landed change to
+the shared repository.
 
 Things that refuse a landing here, and what to do:
 

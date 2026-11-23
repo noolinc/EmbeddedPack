@@ -17,6 +17,42 @@ refusal names the rule, the file and line, and the clause of the standard:
 The same gate applies to a person and to an AI agent. One policy also runs at
 `nool push` and holds a change that needs an independent approval.
 
+### Nool basics
+
+If you have used Git but not Nool, read this first. The rest of the guide
+uses these words without explaining them again.
+
+Nool is version control layered on a Git repository. Every change Nool
+accepts is also written as an ordinary Git commit, so your Git host, pull
+requests and CI keep working. The difference is that Nool checks a change
+*before* accepting it. In a Nool repository you do not run `git commit` or
+`git push`. Many setups block them, and Nool's commands replace them:
+
+| Git habit | In a Nool repository |
+|---|---|
+| `git add` + `git commit` | `nool propose --path <file> … --intent "<what>" --why "<why>" --solidify` |
+| `git push` | `nool push origin` |
+| `git pull` | `nool pull origin` |
+| `git log` | `nool log` |
+| `git status` | `nool status` |
+
+| Term | Meaning |
+|---|---|
+| **propose** | Submit changed files. Name each file with `--path`. Nool builds and tests them, then runs every installed policy. `--solidify` saves the change at once if all of that passes. A refused proposal saves nothing, so fix the code and run the same command again. |
+| **land** | A change that passed is *landed*: saved in your local history, not yet shared. |
+| **knot** | One landed change. Its id is a hex string, and an 8-character prefix such as `1bfa6ba9` is enough in commands. `nool log` lists them. |
+| **push** | Send your landed knots to a remote. Some checks, including this pack's approval checks, run here. Exit code 3 means the push is held, waiting for evidence. |
+| **policy** | A sandboxed WASM plugin that Nool runs on every proposal. Its refusals start with `POLICY_DENY`. This pack is eight policies. |
+| **reification** | Nool's build-and-test step on a proposal. "Reification failed" means the code did not compile or a test failed. That is the compiler or your tests talking, not this pack. |
+| **attestation** | A signed verdict (`pass` or `fail`) about one knot, such as a reviewer's approval or CI's test result. It travels with the repository but never changes the branch. |
+| **checker key** | A public key listed in `[attestation] checker_keys` in `nool.toml`. Only attestations signed by a checker key count. `nool admin team key` prints your machine's public key. |
+| **`nool.toml`** | Nool's settings for the repository. A proposal that changes it needs an extra `--justification "<reason>"`. |
+| **announce / lease** | `nool announce intent --intent "<what>" --target-nodes <paths>` tells other people and agents which files you are about to edit. It is optional when you work alone. |
+| **contract** | On the Enterprise edition, a coding agent needs an editor contract (`nool admin contract grant --role editor`) before its changes can land. |
+
+More: the [Nool quickstart](https://www.nool.dev/docs/quickstart), or
+`nool quick-start` in a terminal.
+
 ## 2. What you gain
 
 | Today | With the pack |
@@ -91,11 +127,14 @@ CAN bootloader is two rows; take what applies from each.
   `.hxx` headers but not `.h`. In a C++ project with `.h` headers, either
   rename them or accept that those headers are outside the C++ rules; and do
   not install `emb_c_subset` there, or it will judge them as C.
-- **The hardware profile matters only to some policies.** `emb_hardware_fit`,
-  `emb_resource_bounds`, `emb_runtime_safety` and `emb_safety_process` read
-  it. The safety level in it also decides, for every policy, whether strict
-  rules can still be deviated. If you install only the language, security and
-  integrity policies, the hardware keys can stay at their defaults.
+- **Each policy reads only part of the hardware profile.** `[hardware]` and
+  `[architecture]` matter to `emb_hardware_fit`, `emb_resource_bounds`,
+  `emb_runtime_safety` and `emb_safety_process`. `[language]` matters to
+  `emb_c_subset` and `emb_cpp_subset`, and `[compatibility]` matters to
+  `emb_firmware_integrity`. `[safety]` matters to every policy, because it
+  decides whether strict rules can still be deviated. If you install only
+  `emb_security_baseline`, every section except `[safety]` can stay as
+  shipped.
 - **`emb_safety_process` is the only one that acts at push.** Without it,
   deviations in the other policies work, but nobody has to approve them.
 - **Edition limits.** Nool's Community edition loads up to 3 policies, Team
@@ -106,28 +145,51 @@ CAN bootloader is two rows; take what applies from each.
 
 ## 4. Set-up (once per repository)
 
-Prerequisites: Nool 8.0.2 or later, a Rust toolchain, and the Nool policy SDK
-in `~/.nool/sdk` (the workspace `Cargo.toml` and
-`crates/emb-policy-glue/Cargo.toml` point at it by path; change the paths if
-yours is elsewhere). Build the policies against the SDK that ships with your
-Nool. After upgrading Nool, rebuild and reinstall them. `nool admin plugin list`
-shows a policy built for an older knot model with a warning, and that policy
-denies changes that use newer knot types.
+The [README](../README.md#set-up-in-your-firmware-repository) walks through
+these steps with copy-paste commands and a worked example. This section is
+the reference.
 
-1. **Describe the target.** Edit `hardware-profile.toml` (section 5). This is
-   the most important step: a wrong profile gives wrong refusals.
-2. **Build.** `tools/build-policies.sh` runs the unit tests and builds every
-   policy to WASM.
-3. **Install.** For each policy:
-   `nool admin plugin install policy-src/<name>/<name>.toml --policy`.
-   Each install lands the policy and pins its hash in `nool.toml`.
-4. **Let agents edit.** On an Enterprise build an agent needs a contract once
-   any policy is installed: `nool admin contract grant --role editor`.
-5. **Name the reviewers.** Add each reviewer's public key to
-   `[attestation] checker_keys` in `nool.toml` and land it (a `nool.toml`
-   change needs `--justification`). `nool attest record` prints the signer's
-   key. Without a trusted key, changes that need approval can never be pushed.
-6. **Check the installation** (section 8).
+Prerequisites: Nool 8.0.2 or later, a Rust toolchain with the
+`wasm32-unknown-unknown` target, and the Nool policy SDK, which the Nool
+installer puts in `~/.nool/sdk`. The workspace `Cargo.toml` and
+`crates/emb-policy-glue/Cargo.toml` refer to the SDK by absolute path, so
+point them at yours. The README gives a one-line `sed` command for this.
+Build the policies against the SDK that ships with your Nool. After upgrading
+Nool, rebuild and reinstall them. `nool admin plugin list` shows a warning
+for a policy built for an older Nool, and that policy refuses changes that
+use newer Nool features.
+
+You build in a clone of this pack. You install into your firmware
+repository.
+
+1. **Describe the target.** Edit `hardware-profile.toml` in the pack clone
+   (section 5). This is the most important step: a wrong profile gives wrong
+   refusals.
+2. **Build and test.** In the pack clone, run
+   `tools/check.sh <policy> [<policy>…]`. It runs the unit tests, builds the
+   named policies to WASM, and proves each one refuses a bad change in a
+   throwaway Nool repository. It must end with `ALL CHECKS PASS`.
+   (`tools/build-policies.sh` only builds, without the end-to-end test.)
+3. **Prepare the firmware repository.** If `nool status` there prints "Not a
+   nool repository", run `nool init` once. It imports your Git history and
+   adds `.nool/` and `nool.toml`.
+4. **Install and pin.** In the firmware repository, for each policy run
+   `nool admin plugin install <pack clone>/policy-src/<name>/<name>.toml --policy`.
+   Then run `nool admin plugin pin`. Each install lands a knot that adds
+   the policy under `policies/`. The pin lands a knot that records every
+   policy's hash under `[[aram.policies]]` in `nool.toml`, so every copy of
+   the repository runs exactly that set. Pin again after any install,
+   rebuild or uninstall.
+5. **Let agents edit.** On the Enterprise edition, an agent needs a contract
+   once any policy is installed: `nool admin contract grant --role editor`.
+6. **Name the reviewers** (needed for `emb_safety_process` and signed test
+   results). Each reviewer runs `nool admin team key` on their own machine
+   and sends you the hex it prints. Add each key as `"ed25519:<hex>"` to
+   `[attestation] checker_keys` in `nool.toml`, and land it with
+   `nool propose --path nool.toml … --justification "<who the reviewers are>" --solidify`.
+   Without a trusted key, changes that need approval can never be pushed.
+7. **Check the installation** (section 8), then **share it** with
+   `nool push origin`.
 
 Install only the policies you chose in section 3.
 
@@ -205,6 +267,9 @@ ram_max_percent = 95
 [recategorize]
 "EMB-PRC-011" = "required"
 "EMB-C-012" = "mandatory"
+
+[analysis]
+max_file_bytes = 2097152   # files larger than this are not analysed (default 2 MiB)
 ```
 
 | Key | What it changes |
@@ -216,6 +281,7 @@ ram_max_percent = 95
 | `[images]` | A change touching two or more roots needs an `emb-cross-image-review` approval before push (EMB-PRC-010) |
 | `[budget]` | Thresholds for `tools/size_budget.py` (section 6, [Flash and RAM budget](#flash-and-ram-budget)) |
 | `[recategorize]` | The guideline re-categorization plan (section 6, [Rule classes](#rule-classes)) |
+| `[analysis] max_file_bytes` | Size above which a file is skipped. Unlike the other optional sections, leaving it out keeps the 2 MiB default rather than switching anything off |
 
 Paths in these lists are relative to the repository root. `*` matches any
 characters, including `/`, and a pattern ending in `/` matches everything
@@ -316,6 +382,9 @@ nool attest record --target <knot> --checker <your name> \
     --assertion emb-deviation-review --verdict pass --push origin
 ```
 
+`nool review` needs the Team edition or above. `<knot>` is the 8-character
+id the author sent.
+
 `--push origin` sends the signed approval to the shared remote. It does not
 send the change: the branch on the remote is untouched until the author
 pushes.
@@ -359,7 +428,7 @@ code? Is the deviation as narrow as it can be?
 |---|---|
 | `test/`, `tests/`, `unittest/`, `mocks/`, `testing/`, `test_*`, `*_test.*` | Exempt from all rules except disabled-test detection (EMB-PRC-003) |
 | `third_party/`, `vendor/`, `external/`, `extern/`, `node_modules/` | Exempt from everything |
-| Files over `[analysis] max_file_bytes` in `hardware-profile.toml` (default 2 MB), binary files | Not analysed |
+| Files over `[analysis] max_file_bytes` in `hardware-profile.toml` (default 2 MiB, section 5), binary files | Not analysed |
 
 ### Working with an AI agent
 
@@ -420,11 +489,23 @@ with the profile.
 
 ### Reification and TLA+
 
+*Reification* is Nool's build-and-test step on a proposal. By default, for a
+C or C++ change, Nool only syntax-checks the changed files. It does not run
+your firmware's tests, so a change that compiles but breaks behaviour can
+still land. This section shows how to add your own checks. Each check is a
+command in `nool.toml` that Nool runs on every proposal, and a failing
+command refuses the proposal.
+
+There are two kinds of gate:
+
+| Gate | When it runs | Use it for |
+|---|---|---|
+| A blocking check (`[[reification.checks]]`) | On the proposer's machine, before the change lands | Fast host tests and small models: seconds to a few minutes |
+| A signed result before push (`[attestation.obligations]`) | On a trusted runner such as CI, after the change lands locally and before `nool push` releases it | Slow suites, hardware-in-the-loop, anything the author's machine can't run |
+
 #### Run firmware host tests before landing
 
-In a CMake firmware probe, Nool 8.0.0 compiled the proposed C change,
-reported `no tests ran (.c)`, and let a regression land. To run your host
-suite during full validation, add a blocking check to `nool.toml`:
+Add a blocking check to `nool.toml`:
 
 ```toml
 [[reification.checks]]
@@ -435,29 +516,40 @@ mode = "block"
 timeout_secs = 300
 ```
 
+- `command` is an argument list, not a shell string. Wrap pipelines in
+  `sh -c` as shown.
+- `pass_files = false` stops Nool from appending the changed file names to
+  the command.
+- `mode = "block"` makes a failing command refuse the proposal. The failing
+  test's output appears in the refusal.
+- `--clean-first` stops the build from reusing objects from an earlier
+  proposal. `--no-tests=error` fails the check if no tests are registered,
+  so a broken CMake setup can't pass silently.
+- `timeout_secs` is per check. A check that times out refuses the proposal.
+  Set it above your slowest build. The default is 300 seconds. Nool's own
+  syntax check has a separate 120-second limit, which you can raise with the
+  `NOOL_INTEGRITY_TIMEOUT_SECS` environment variable.
+- `extensions = ["c", "h"]` (optional) runs the check only for proposals
+  that touch those file types.
+
 Use your project's host build options and register the tests with CTest.
-`--clean-first` prevents the check from reusing objects from a prior proposal.
-`command` is an argument array. `pass_files = false` prevents Nool from
-appending changed file names. CTest's `--no-tests=error` also fails the
-check if the host configuration registers zero tests.
+Land the `nool.toml` change on its own, with
+`--justification "<why the check is needed>"`.
 
-Review the commands and run `nool code trust` in each clone. Renew trust when
-Nool asks after a configuration change. An untrusted clone warns and skips
-these checks even in `block` mode. In the trusted probe, a failing C assertion
-refused the proposal and appeared in the output. Land changes to `nool.toml`
-in their own proposal with an explicit `--justification`.
+**Every clone must trust the commands once.** Because these checks run
+arbitrary commands, Nool skips them, with a warning, in a clone that has not
+approved them, even in `block` mode. After reading the commands in
+`nool.toml`, each person runs `nool code trust` in their clone. Nool asks
+again after the commands change.
 
-Each custom command has its own `timeout_secs` budget. Nool 8.0.0's schema
-lists a 300-second default, and a one-second blocking check in the probe
-refused the proposal when the command timed out. Set the budget explicitly
-for slow builds. The built-in integrity driver reported a separate
-120-second timeout floor and supports the `NOOL_INTEGRITY_TIMEOUT_SECS`
-override.
+Checks see the whole working tree, including edits you haven't proposed. Run
+them from a clean checkout if you want the result to reflect only the
+proposed change.
 
 #### Run TLC on a small model
 
-Keep the model and its finite configuration in the firmware repository.
-With TLC on the proposing machine's `PATH`, add a second check:
+Keep the TLA+ model and its finite configuration in the firmware repository.
+With TLC on the proposing machine's `PATH`, add a check:
 
 ```toml
 [[reification.checks]]
@@ -465,26 +557,22 @@ name = "tla-model-check"
 command = ["tlc", "-config", "specs/Ring.cfg", "specs/Ring.tla"]
 pass_files = false
 mode = "block"
+extensions = ["tla", "cfg"]
 ```
 
-In the probe, TLC 2.19 allowed a finite ring-index model with wraparound.
-Removing wraparound violated `InBounds` at index 4 for a four-slot ring.
-TLC exited 12 and Nool refused the proposal with the counterexample.
-This verifies the invariant over the finite model. Host tests still check
-the C implementation.
+If TLC finds an invariant violation, it exits non-zero, and Nool refuses the
+proposal and shows TLC's counterexample. For example, removing the
+wraparound from a four-slot ring-buffer model violates `InBounds` at index 4.
+TLC checks the model, not your C code, so keep the host tests as well.
+Without `extensions`, TLC runs on every proposal, including C-only changes.
 
-Without an extension filter, Nool ran TLC on both C and model proposals.
-`extensions = ["tla", "cfg"]` limited the check to proposals touching those
-extensions and skipped a C-only change. Custom checks in the probe also
-saw the checkout's unproposed edits, including a dirty `Ring.cfg`. Use a
-clean checkout apart from the proposed inputs when validating locally.
+#### Require signed evidence before push
 
-#### Require signed TLC evidence before push
-
-Use the blocking local check for fast models. For slower runs or enforcement
-on specific source paths, have a trusted runner check the exact landed knot
-and require its signed result before push. Merge these settings into the
-existing tables in `nool.toml`:
+For checks too slow or too hardware-bound to run on the author's machine,
+have a trusted runner check the landed knot and sign the result. `nool push`
+then refuses to send any knot that touches the listed paths until a signed
+pass exists for it. Merge these settings into the existing tables in
+`nool.toml`:
 
 ```toml
 [attestation]
@@ -496,24 +584,25 @@ checker_keys = ["ed25519:<runner-public-key-hex>"]
 "specs/**" = ["tla-model-check"]
 ```
 
-Replace the key placeholder and narrow the paths to the code and specs your
-model covers. The probe could land locally, but `nool push` refused matching
-knots with missing evidence, including earlier unsent knots. Inspect each
-knot with `nool attest obligations <knot>`.
+Replace the placeholder with the runner's key (`nool admin team key` on the
+runner prints it), and narrow the paths to the code your check covers. The
+author can still land locally. `nool attest obligations <knot>` shows which
+results a knot still needs.
 
-Give the runner access to the knot before the gated push, for example through
-a separate staging checkout. Run TLC on that knot and record a pass only
-after TLC succeeds. With the signing key supplied through `NOOL_IDENTITY_KEY`,
-a runner with the local ledger can use:
+On the runner, get the knot (the same way a reviewer does in
+[Getting a deviation approved](#getting-a-deviation-approved)), run the
+check, and record a pass only if it succeeded. With the runner's signing key
+in `NOOL_IDENTITY_KEY`:
 
 ```sh
 nool attest record --target "$knot" --checker ci --assertion tla-model-check \
-    --verdict pass --scope full
+    --verdict pass --scope full --push origin
 ```
 
-Deliver the signed attestation to the pushing clone before retrying the push.
-For a remote runner, the signed-ref exchange follows the workflow in
-[Getting a deviation approved](#getting-a-deviation-approved).
+The author then runs `nool attest wait <knot> --assertion tla-model-check --remote origin`
+and `nool push origin`. The
+[firmware regression examples](../examples/firmware-regressions/) run this
+whole loop end to end with a disposable key.
 
 ## 7. The policies
 
@@ -555,8 +644,8 @@ not expand macros or follow includes.
 Verify yourself:
 - A banned construct hidden inside a macro or behind a function pointer is
   not seen. Your analyser must cover that.
-- This is 19 of the MISRA C:2012 guidelines, the ones decidable from text.
-  Essential-type rules, pointer arithmetic, initialisation, side effects and
+- 19 of these 22 rules cite MISRA C:2012. They cover only the guidelines
+  that can be decided from text, a small part of MISRA C. Essential-type rules, pointer arithmetic, initialisation, side effects and
   undefined behaviour need a real analyser.
 - EMB-C-007 exists to keep `printf` out of production. If you use a
   lightweight logger, name it something else; do not deviate `<stdio.h>`
@@ -861,13 +950,30 @@ upgrade.
 | The push gate works | Push a change with a deviation before approving it | Exit code 3, "evidence pending", naming EMB-PRC-005 |
 | Reviewers are trusted | `nool attest show <knot>` after a reviewer attests | The approval is shown as trusted |
 
-A smoke test you can run in any installed repository:
+A smoke test proposes a file that breaks a rule and expects a refusal. Run it
+in a throwaway copy of the repository. If the policy is not active, the file
+lands, and a landed knot stays in history (`nool rewind` restores files but
+keeps the knot). A plain `cp -R` copy is a complete Nool repository.
+
+Pick the line for a policy you installed:
+
+| Policy | Smoke file content | Expected rule |
+|---|---|---|
+| `emb_security_baseline` | `const char *wifi_password = "hunter2-factory";` | EMB-SEC-001 |
+| `emb_c_subset` | `void f(void) { goto out; out: return; }` | EMB-C-001 |
+| `emb_runtime_safety` | `int printf(const char *, ...); void USART1_IRQHandler(void) { printf("rx\n"); }` | EMB-RT-001 |
 
 ```sh
-printf 'void f(void)\n{\n    goto out;\nout:\n    return;\n}\n' > src/smoke.c
-nool propose --path src/smoke.c --intent "smoke" --why "check the gate" --solidify   # must be refused with EMB-C-001
-rm src/smoke.c
+cp -R /path/to/your-firmware /tmp/firmware-smoke && cd /tmp/firmware-smoke
+smoke_dir=$(mktemp -d ./embpack-smoke.XXXXXX)
+printf '%s\n' 'const char *wifi_password = "hunter2-factory";' > "$smoke_dir/smoke.c"
+nool propose --path "$smoke_dir/smoke.c" --intent "smoke" --why "check the policy gate" --solidify
+cd - && rm -rf /tmp/firmware-smoke
 ```
+
+The output must contain `POLICY_DENY` and the expected rule. Its last line,
+`profile: …`, must show your hardware profile. If the output says
+`✓ Landed knot`, the policy is not active: check `nool admin plugin list`.
 
 ## 9. What stays your responsibility
 

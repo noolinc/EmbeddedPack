@@ -12,6 +12,30 @@ Start with the policies closest to the problems you see in your firmware. The
 setup below walks through a connected-device example and ends with a quick
 check that proves a policy is active.
 
+## New to Nool?
+
+Nool is version control that sits on top of Git. Your repository stays a Git
+repository, and every change Nool accepts is also written as an ordinary Git
+commit. Unlike Git, Nool checks a change before it is accepted. In a
+repository that uses Nool, you save and share work with `nool` commands
+instead of `git commit` and `git push`. These are the terms used in this
+README:
+
+| Term | Meaning |
+|---|---|
+| **propose** | `nool propose --path <file> … --solidify` submits your edited files. Nool compiles and tests them and runs the installed policies. If everything passes, the change is accepted. If not, Nool prints why and nothing is saved. |
+| **land** | A change that passed is *landed*: it is saved in your local history. This is like `git commit`. |
+| **knot** | One landed change, identified by a hex id such as `1bfa6ba9`. This is like a Git commit hash. |
+| **push** | `nool push origin` sends your landed knots to the shared remote, like `git push`. Some checks in this pack run only at push. |
+| **policy** | A plugin Nool runs on every proposal. A broken rule refuses the proposal with `POLICY_DENY` and a rule ID such as `EMB-SEC-001`. |
+| **reification** | Nool's name for the build-and-test step it runs on a proposal. |
+| **attestation** | A signed verdict about a knot, such as a reviewer's approval or a CI test result. It is *trusted* when the signer's public key is listed under `checker_keys` in `nool.toml`. |
+| **`nool.toml`** | Nool's settings file at the repository root. Proposing a change to it needs an extra `--justification "<reason>"`. |
+
+You don't need to know more than this to install and use the pack. For the
+longer version, see [Nool basics](docs/GUIDE.md#nool-basics) in the guide and
+the [Nool quickstart](https://www.nool.dev/docs/quickstart).
+
 ## Pick your policies
 
 | If you work on… | Start with… |
@@ -50,21 +74,32 @@ names you chose in both the build and install commands.
 
 ### 1. Install the tools and clone the pack
 
-Install Nool and Rust. The Nool installer puts the policy SDK in `~/.nool/sdk`.
-Check the CLI and add the Rust target used to build the policies.
-[Nool installation](https://www.nool.dev/setup)
+You need Nool 8.0.2 or later, Rust (from [rustup](https://rustup.rs/)) and
+Git. The Nool installer also puts the policy SDK, which the policies are
+built against, in `~/.nool/sdk`. [Nool installation](https://www.nool.dev/setup)
+
+Check the Nool version, add the Rust target used to build the policies, and
+clone the pack. The clone is a working copy for building policies. You don't
+change your firmware here.
 
 ```sh
-nool --version
+nool --version          # must print 8.0.2 or later
+ls ~/.nool/sdk          # must list nool-aram-policy-sdk and nool-policy-abi
 rustup target add wasm32-unknown-unknown
 git clone https://github.com/noolinc/EmbeddedPack.git embedded-policy-pack
 cd embedded-policy-pack
-pack_dir="$PWD"
+pack_dir="$PWD"         # later steps use this to find the built policies
 ```
 
-The Cargo manifests use local SDK paths. In `Cargo.toml`, point
-`nool-aram-policy-sdk` at your SDK directory. In
-`crates/emb-policy-glue/Cargo.toml`, do the same for `nool-policy-abi`.
+The two Cargo manifests contain the SDK location as an absolute path, and the
+path in the clone is the maintainer's. Point both at your own SDK:
+
+```sh
+sdk_dir="$HOME/.nool/sdk"   # change this if `ls` above found the SDK elsewhere
+sed -i.bak -E "s#path = \"[^\"]*/(nool-aram-policy-sdk|nool-policy-abi)\"#path = \"$sdk_dir/\1\"#" \
+  Cargo.toml crates/emb-policy-glue/Cargo.toml
+grep -n 'sdk/' Cargo.toml crates/emb-policy-glue/Cargo.toml   # both lines now show your path
+```
 
 ### 2. Check the hardware profile and build the policies
 
@@ -90,8 +125,10 @@ to `"QM"`, `"none"` and `0`, respectively.
 [Hardware profile guide](docs/GUIDE.md#5-the-hardware-profile)
 
 Run this from the pack clone. It runs the rule tests, builds the chosen
-policies, and tests them in throwaway Nool repositories. Look for
-`ALL CHECKS PASS` before moving on.
+policies into `.wasm` files, and tests each one in a throwaway Nool
+repository it deletes afterwards. It takes a few minutes the first time. The
+last line must be `ALL CHECKS PASS`. If a line starts with `FAIL`, it names
+the command to rerun to see the full error.
 
 ```sh
 tools/check.sh emb_security_baseline emb_firmware_integrity emb_runtime_safety
@@ -106,53 +143,122 @@ approval before push.
 
 ### 3. Install into your firmware repository
 
-Stay in the same shell so `pack_dir` is still set. Change into your firmware
-repository and run `nool init` if it has never used Nool. On Enterprise builds
-that require an editor contract for this key, run
-`nool admin contract grant --role editor` before installing.
-[Nool quickstart](https://www.nool.dev/docs/quickstart)
+Stay in the same shell so `pack_dir` is still set, and change into your
+firmware repository:
 
 ```sh
 cd /path/to/your-firmware
+nool status            # prints "Not a nool repository" if Nool has never been set up here
+```
+
+If Nool has never been set up here, run `nool init` once. It records your
+existing Git history and adds Nool's files (`.nool/` and `nool.toml`). Your
+Git branches and remote are not changed.
+[Nool quickstart](https://www.nool.dev/docs/quickstart)
+
+On the Enterprise edition, coding agents (and some scripts) can edit only
+after you grant them an editor contract. Run
+`nool admin contract grant --role editor` once. The command is harmless on
+other editions.
+
+Install the policies, then *pin* them:
+
+```sh
 for policy in emb_security_baseline emb_firmware_integrity emb_runtime_safety; do
   nool admin plugin install "$pack_dir/policy-src/$policy/$policy.toml" --policy
 done
+nool admin plugin pin
 nool admin plugin list
 ```
 
-Check that all three policies appear. Nool Community allows up to three
-policies, Team allows eleven, and Enterprise has no limit. Compiled policies
-and declarative rules share that allowance. [Aram policy reference](https://www.nool.dev/docs/policies) · [Nool editions](https://www.nool.dev/pricing)
+Each install lands a knot that adds the policy under `policies/`, so the
+policy applies to everyone who pulls the repository. `nool admin plugin pin`
+lands one more knot that records each policy's hash under `[[aram.policies]]`
+in `nool.toml`. From then on, every copy of the repository runs exactly that
+set, and a knot landed without it is refused when pulled.
+`nool admin plugin list` must show each policy with `(ok)` on its line.
+Run `nool admin plugin pin` again whenever you install, rebuild or remove a
+policy.
+
+Nool Community allows up to three policies, Team allows eleven, and
+Enterprise has no limit. Compiled policies and declarative rules share that
+allowance. [Aram policy reference](https://www.nool.dev/docs/policies) · [Nool editions](https://www.nool.dev/pricing)
 
 ### 4. Check that a rule fires
 
-In a trial checkout of your firmware repository, use the commands below to
-propose a C file containing a fake password. This uses
-`emb_security_baseline` from the example. Nool should refuse the proposal
-with `EMB-SEC-001`. The last two commands clean up the temporary file and
-directory.
+Propose a C file containing a fake password and check that Nool refuses it.
+This uses `emb_security_baseline` from the example.
+
+Do this in a throwaway copy of your firmware repository. If the policy is
+not working, the file lands, and a landed knot stays in history. (`nool
+rewind` restores your files but keeps the knot.) A plain copy is a complete
+Nool repository, and deleting it removes everything the test did:
 
 ```sh
+cp -R /path/to/your-firmware /tmp/firmware-smoke
+cd /tmp/firmware-smoke
 smoke_dir=$(mktemp -d ./embpack-smoke.XXXXXX)
 printf 'const char *wifi_password = "hunter2-factory";\n' > "$smoke_dir/smoke.c"
 nool propose --path "$smoke_dir/smoke.c" --intent "Check the firmware policy" \
   --why "Verify that the security policy catches a fake password" --solidify
-rm "$smoke_dir/smoke.c"
-rmdir "$smoke_dir"
 ```
 
-If the file lands, pause before adopting the policy and check whether it is
-installed and active. [Check your installation](docs/GUIDE.md#8-checking-the-installation)
+The proposal must end with a refusal like this:
+
+```text
+Error: Gate stack denied [POLICY_DENY] at stage pre-propose: [EMB-SEC-001] embpack-smoke.U6i0c9/smoke.c:1: wifi_password is assigned a literal (credentials and keys shall not be hard-coded) -- ETSI EN 303 645 Provision 5.1-1, 5.4-3; CWE-798 ...
+profile: generic-cortex-m4 (RAM 65536 B, flash 262144 B, fpu Single, Rtos, heap None, ASIL B, 62304 class B, SIL 2))
+```
+
+The last line shows the hardware profile built into the policy. Check that it
+shows your values. When you're done, delete the copy:
+
+```sh
+cd /path/to/your-firmware
+rm -rf /tmp/firmware-smoke
+```
+
+If the output says `✓ Landed knot` instead, the policy is not active. Don't
+adopt the policy yet. [Check your installation](docs/GUIDE.md#8-checking-the-installation)
+
+### 5. Share the policies with your team
+
+The installs and the pin are landed knots in your local history. Send them to
+the shared remote so everyone else gets the same policies:
+
+```sh
+nool push origin
+```
+
+Then read [Adopting on an existing code base](docs/GUIDE.md#adopting-on-an-existing-code-base)
+before your team starts editing older files. If you installed
+`emb_safety_process`, also [name the reviewers](docs/GUIDE.md#4-set-up-once-per-repository)
+whose keys can approve deviations. Until you do, changes that need approval
+can't be pushed.
 
 ## Working with the policies
 
-- **When a proposal is refused**, start with the rule ID and the named file.
-  For example, `EMB-RT-001` can point to a `printf()` inside a UART
-  interrupt handler. Move the printing into a thread, then propose the change
-  again. [Reading a refusal](docs/GUIDE.md#reading-a-refusal)
-- **When you need a deviation**, check whether the rule allows one. Put the
-  reason next to the code. With `emb_safety_process` installed, the change
-  can land locally and wait for a trusted reviewer to sign before you push.
+- **To save and share a change**, edit files as usual, then propose and push:
+
+  ```sh
+  nool propose --path src/motor.c --path src/motor.h \
+    --intent "Limit motor current at start-up" --why "Inrush tripped the PSU on rev B boards" --solidify
+  nool push origin
+  ```
+
+  `--intent` says what changed, and `--why` says why. Both are saved with
+  the knot. Name every file you changed with `--path`.
+- **When a proposal is refused**, nothing is saved. Start with the rule ID
+  and the named file and line. For example, `EMB-RT-001` can point to a
+  `printf()` inside a UART interrupt handler. Move the printing into a
+  thread, then run the same `nool propose` command again.
+  [Reading a refusal](docs/GUIDE.md#reading-a-refusal)
+- **When you need a deviation** (an approved exception to a rule), check
+  that the refusal says the rule can be deviated. Then put a comment on the
+  line, or the line above, with a reason of at least 20 characters:
+  `/* EMB-DEVIATION(EMB-C-001): single cleanup exit, deviation record DR-7 */`.
+  With `emb_safety_process` installed, the change lands locally, but
+  `nool push` holds it until a trusted reviewer signs an approval.
   Add reviewer public keys to `checker_keys` in the `[attestation]` section
   of `nool.toml` before relying on that workflow.
   [Getting a deviation approved](docs/GUIDE.md#getting-a-deviation-approved)
@@ -164,14 +270,18 @@ installed and active. [Check your installation](docs/GUIDE.md#8-checking-the-ins
   image. It warns and fails at the percentages in `[budget]`.
   [Flash and RAM budget](docs/GUIDE.md#flash-and-ram-budget)
 - **To agree rule classes across teams**, record a re-categorization plan in
-  `[recategorize]`. Following MISRA Compliance:2020, it can make a rule
-  stricter or switch off an advisory rule, but never relax a required rule.
+  `[recategorize]` in `hardware-profile.toml`. Each rule has a class: a
+  *mandatory* rule can never be deviated, a *required* rule can, and an
+  *advisory* rule only warns. Following MISRA Compliance:2020, the plan can
+  make a rule stricter or switch off an advisory rule, but never relax a
+  required rule.
   Nool 8.0.2 does not yet display policy warnings, so advisory rules are not
   visible until you raise them to `required`. [Rule classes](docs/GUIDE.md#rule-classes)
 
 ## How this fits with Nool and Git
 
-Nool can reserve files or symbols before people and agents edit them, run
+Nool can reserve files or symbols before people and agents edit them (an
+*announcement*, which takes a *lease*), run
 configured validation before a change lands, and save the results with the
 signed change record. The pack supplies eight sandboxed policies to Aram,
 Nool's policy engine. Landed changes are mirrored as ordinary Git commits,
@@ -181,8 +291,9 @@ so your Git host, pull requests and CI stay in use.
 You can use the pack from the CLI, with Claude Code, Codex or opencode, or
 with the bundled `nool code` agent. To inspect a landed change, run
 `nool evidence knot <id>`. To see approvals and other signed verdicts for it,
-run `nool attest show <id>`. To apply the same policy set across replicas,
-use `nool admin plugin pin` to record its hashes in `nool.toml`.
+run `nool attest show <id>`. `nool log` lists recent knots with their ids.
+A *replica* is any copy of the repository: yours, a teammate's or a CI
+runner's. The pin from step 3 makes every replica run the same policy set.
 [Nool coding agent docs](https://www.nool.dev/docs/nool-code)
 
 ### Roll out policies across repositories
@@ -213,9 +324,11 @@ design, test coverage, deviations and target behaviour.
 ## Firmware failures you can exercise
 
 The runnable examples use small C programs to model three reported failure
-modes. The Nool demo rejects a counter regression before landing and keeps
-the scheduling and UART regressions off a shared branch. Signed passes
-release the exact tested revision. [Run the demonstrations](examples/firmware-regressions/)
+modes. They show two ways to gate a change with tests. The counter
+regression is refused at propose, because Nool runs its test before landing.
+The scheduling and UART regressions can land locally, but `nool push` holds
+them until a trusted test runner signs a pass for that exact knot.
+[Run the demonstrations](examples/firmware-regressions/)
 
 - **Mars Pathfinder priority inversion.** JPL enabled priority inheritance
   after a low-priority lock holder was delayed and a high-priority task
