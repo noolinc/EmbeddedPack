@@ -31,16 +31,16 @@ older violation in that file. [Policy selection and adoption guide](docs/GUIDE.m
 
 | Policy | Examples |
 |---|---|
-| `emb_c_subset` | Flags `goto`, `setjmp`, assignment inside conditions and other patterns covered by MISRA C, BARR-C and CERT C. |
-| `emb_cpp_subset` | Flags C-style casts, banned headers, variadic functions and other restricted C++ constructs. |
+| `emb_c_subset` | Flags `goto`, `setjmp`, assignment inside conditions and other patterns covered by MISRA C, BARR-C and CERT C. Refuses C newer than the C version you set, and build files that select another version. |
+| `emb_cpp_subset` | Flags C-style casts, banned headers, variadic functions and other restricted C++ constructs. Refuses C++ newer than the C++ version you set, and build files that select another version. |
 | `emb_resource_bounds` | Checks heap use, recursion and loops whose bounds the policy cannot establish. |
 | `emb_hardware_fit` | Checks code against the configured RAM, flash, FPU and execution model. |
 | `emb_security_baseline` | Flags embedded credentials, unsafe string functions and disabled TLS verification. |
 | `emb_runtime_safety` | Flags blocking calls in interrupt handlers, interrupts left disabled and unsafe watchdog use. |
-| `emb_firmware_integrity` | Flags weakened build and boot settings, such as disabled rollback protection or development signing keys. |
-| `emb_safety_process` | Checks for disabled tests, suppressed analysis findings and missing requirement tags where applicable. It also gates push on review for deviations and profile changes. |
+| `emb_firmware_integrity` | Flags weakened build and boot settings, such as disabled rollback protection or development signing keys. Requires a breaking change to a linker script or partition table to change a version file. |
+| `emb_safety_process` | Checks for disabled tests, suppressed analysis findings and missing requirement tags where applicable. Before push, it requires review of deviations, profile changes and changes that span firmware images, and a target test run for hardware-facing changes. It warns about edits to generated vendor code. |
 
-The pack implements 79 rules across these eight policies. The guide lists their
+The pack implements 90 rules across these eight policies. The guide lists their
 source clauses and describes what each rule checks. [Full policy reference](docs/GUIDE.md#7-the-policies)
 
 ## Set up in your firmware repository
@@ -76,8 +76,10 @@ Edit only the settings your chosen policies use in
 | `emb_hardware_fit` | RAM, flash, FPU, execution model, heap policy and stack-object limit |
 | `emb_resource_bounds` | Heap policy and maximum function length |
 | `emb_runtime_safety` | Execution model. This controls the check for non-reentrant calls. |
-| `emb_safety_process` | Safety classification. It determines when production code needs requirement tags. |
-| `emb_c_subset`, `emb_cpp_subset`, `emb_security_baseline`, `emb_firmware_integrity` | The board and architecture settings can stay as shipped. |
+| `emb_safety_process` | Safety classification, which determines when production code needs requirement tags. Optionally `[evidence]` for target test runs and `[images]` for separately flashed images. |
+| `emb_c_subset`, `emb_cpp_subset` | Optionally `[language]`: the C and C++ versions your compiler builds, and whether `.h` files are C++. |
+| `emb_firmware_integrity` | Optionally `[compatibility]`: other files whose layout persists on devices, and your version files. |
+| `emb_security_baseline` | The board and architecture settings can stay as shipped. |
 
 **Check `[safety]` separately.** Every policy uses the safety classification
 when deciding whether a strict rule can be waived. The sample uses ASIL B,
@@ -158,6 +160,14 @@ installed and active. [Check your installation](docs/GUIDE.md#8-checking-the-ins
   analyser, CI and hardware tests. The policies inspect changed files for
   specific patterns. Use your build, tests and target measurements to check
   behaviour, stack use and timing. [Firmware host tests and TLA+ checks](docs/GUIDE.md#reification-and-tla)
+- **To check flash and RAM use**, run `tools/size_budget.py` on the linked
+  image. It warns and fails at the percentages in `[budget]`.
+  [Flash and RAM budget](docs/GUIDE.md#flash-and-ram-budget)
+- **To agree rule classes across teams**, record a re-categorization plan in
+  `[recategorize]`. Following MISRA Compliance:2020, it can make a rule
+  stricter or switch off an advisory rule, but never relax a required rule.
+  Nool 8.0.2 does not yet display policy warnings, so advisory rules are not
+  visible until you raise them to `required`. [Rule classes](docs/GUIDE.md#rule-classes)
 
 ## How this fits with Nool and Git
 
@@ -175,30 +185,54 @@ run `nool attest show <id>`. To apply the same policy set across replicas,
 use `nool admin plugin pin` to record its hashes in `nool.toml`.
 [Nool coding agent docs](https://www.nool.dev/docs/nool-code)
 
-## Real firmware bugs and the checks that could catch them
+### Roll out policies across repositories
 
-Each of these failures needs a project-specific test. Nool can make the
-test result a condition of landing or pushing the change.
+A platform team can maintain the approved policy source and release
+versioned WASM binaries and manifests for firmware teams to install. Reuse
+the same build across repositories with the same profile. Build separate
+variants when targets need different RAM, FPU, execution-model or safety
+settings. Install and pin the approved policy set in each repository so
+developers, CI and other replicas run the approved hashes.
+[Policy pinning and workspace governance](https://www.nool.dev/docs/governance)
 
-- **Mars Pathfinder repeatedly reset under load.** A high-priority task
-  waited on a lock held by a lower-priority task that was kept from running.
-  JPL enabled priority inheritance to fix it. Reproduce the scheduling
-  sequence in an RTOS stress test and check the high-priority task's deadline.
-  Require a signed pass from the target test runner before pushing scheduler
-  or lock changes. [Glenn Reeves's firsthand account](https://retis.santannapisa.it/~giorgio/mars/reeves.html)
-- **A Boeing 787 generator-control counter could overflow after 248 days of
-  continuous power.** The FAA described a risk that the generator control
-  units could enter failsafe mode together. A host test can place the counter
-  just below its limit, advance through the overflow boundary, and check the
-  controller's required behaviour. Run it as a blocking Nool check on every
-  relevant proposal. [FAA directive](https://www.federalregister.gov/documents/2015/05/01/2015-10066/airworthiness-directives-the-boeing-company-airplanes)
-- **A Zephyr STM32 UART could leave too much time between bytes.** The
-  reported driver behaviour waited for transmission to finish before
-  interrupting to queue more data. On an STM32H563, a Zephyr Twister test
-  with a board fixture could exercise the timer-to-UART interrupt handoff,
-  measure the largest gap on the wire, and check that the last byte finishes
-  and TX interrupts stop after disable. Require the board runner's signed
-  result before push. [Zephyr issue #125432](https://github.com/zephyrproject-rtos/zephyr/issues/125432) · [Twister device testing](https://docs.zephyrproject.org/latest/develop/twister/index.html#running-tests-on-hardware)
+Before rolling out a policy, check its rules against your coding standard,
+target and exception process. Make any required changes in the policy source
+or profile. Run the rule tests and representative passing and failing
+changes with `tools/check.sh`. Pilot the build in one repository, then
+deploy that version to the others. Repeat the checks when the policy or
+profile changes.
+
+An Enterprise workspace can set common governance requirements and issuer
+keys. Protect the shared branches and require a CI result that verifies the
+approved policy set and evidence for the revision being merged. When those
+checks are required, reviewers can use the recorded verdicts instead of
+rechecking each enforced rule by hand. They can spend their review time on
+design, test coverage, deviations and target behaviour.
+[Nool with GitHub Actions](https://www.nool.dev/docs/github-actions) · [GitHub branch protection](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches)
+
+## Firmware failures you can exercise
+
+The runnable examples use small C programs to model three reported failure
+modes. The Nool demo rejects a counter regression before landing and keeps
+the scheduling and UART regressions off a shared branch. Signed passes
+release the exact tested revision. [Run the demonstrations](examples/firmware-regressions/)
+
+- **Mars Pathfinder priority inversion.** JPL enabled priority inheritance
+  after a low-priority lock holder was delayed and a high-priority task
+  missed its deadline. The demo checks the wait in a deterministic
+  three-task schedule. An RTOS project can run the same kind of deadline
+  assertion under its actual workload. [Glenn Reeves's firsthand account](https://retis.santannapisa.it/~giorgio/mars/reeves.html)
+- **Boeing 787 counter overflow.** The FAA reported that a counter could
+  overflow after 248 days of continuous power, sending the generator
+  control units into failsafe mode together. The host example drives a
+  representative counter through rollover and checks that the real
+  timeout still fires. Nool blocks a proposal that fails that test.
+  [FAA directive](https://www.federalregister.gov/documents/2015/05/01/2015-10066/airworthiness-directives-the-boeing-company-airplanes)
+- **Zephyr STM32 UART timing.** The reported driver waited for transmission
+  to finish before queuing more data. The demo models the timer-to-UART
+  handoff and checks byte order, idle gaps, final completion and interrupt
+  disable. The STM32H563 result still needs a Twister test and measurement
+  on a board. [Zephyr issue #125432](https://github.com/zephyrproject-rtos/zephyr/issues/125432) · [Twister device testing](https://docs.zephyrproject.org/latest/develop/twister/index.html#running-tests-on-hardware)
 
 One check already ships with this pack. `emb_runtime_safety` refuses a
 `printf()` call inside a recognised interrupt handler with `EMB-RT-001`.
