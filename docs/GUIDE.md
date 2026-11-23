@@ -106,10 +106,13 @@ CAN bootloader is two rows; take what applies from each.
 
 ## 4. Set-up (once per repository)
 
-Prerequisites: Nool 7.30 or later, a Rust toolchain, and the Nool policy SDK
+Prerequisites: Nool 8.0.2 or later, a Rust toolchain, and the Nool policy SDK
 in `~/.nool/sdk` (the workspace `Cargo.toml` and
 `crates/emb-policy-glue/Cargo.toml` point at it by path; change the paths if
-yours is elsewhere).
+yours is elsewhere). Build the policies against the SDK that ships with your
+Nool. After upgrading Nool, rebuild and reinstall them. `nool admin plugin list`
+shows a policy built for an older knot model with a warning, and that policy
+denies changes that use newer knot types.
 
 1. **Describe the target.** Edit `hardware-profile.toml` (section 5). This is
    the most important step: a wrong profile gives wrong refusals.

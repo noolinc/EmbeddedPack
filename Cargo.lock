@@ -391,7 +391,7 @@ checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
 
 [[package]]
 name = "nool-aram-policy-sdk"
-version = "7.29.0"
+version = "8.0.2"
 dependencies = [
  "bincode",
  "nool-policy-abi",
@@ -400,7 +400,7 @@ dependencies = [
 
 [[package]]
 name = "nool-policy-abi"
-version = "7.29.0"
+version = "8.0.2"
 dependencies = [
  "bincode",
  "blake3",
