@@ -14,9 +14,11 @@ check that proves a policy is active.
 
 ## New to Nool?
 
-Nool is version control that sits on top of Git. Your repository stays a Git
-repository, and every change Nool accepts is also written as an ordinary Git
-commit. Unlike Git, Nool checks a change before it is accepted. In a
+Nool is a software assurance substrate: the layer every change passes
+through, where it is checked, and where the result is kept as signed
+evidence. It runs on your Git repository, which stays a Git repository, and
+every change Nool accepts is also written as an ordinary Git commit. Unlike
+Git, Nool checks a change before it is accepted. In a
 repository that uses Nool, you save and share work with `nool` commands
 instead of `git commit` and `git push`. These are the terms used in this
 README:

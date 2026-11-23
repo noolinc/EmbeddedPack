@@ -22,9 +22,11 @@ The same gate applies to a person and to an AI agent. One policy also runs at
 If you have used Git but not Nool, read this first. The rest of the guide
 uses these words without explaining them again.
 
-Nool is version control layered on a Git repository. Every change Nool
-accepts is also written as an ordinary Git commit, so your Git host, pull
-requests and CI keep working. The difference is that Nool checks a change
+Nool is a software assurance substrate: the layer every change passes
+through, where it is checked, and where the result is kept as signed
+evidence. It runs on a Git repository. Every change Nool accepts is also
+written as an ordinary Git commit, so your Git host, pull requests and CI
+keep working. The difference is that Nool checks a change
 *before* accepting it. In a Nool repository you do not run `git commit` or
 `git push`. Many setups block them, and Nool's commands replace them:
 
