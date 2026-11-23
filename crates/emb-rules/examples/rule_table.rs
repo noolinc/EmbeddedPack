@@ -13,6 +13,7 @@ fn main() {
             (Category::Mandatory, _) => "Mandatory",
             (Category::Required, true) => "Required, strict",
             (Category::Required, false) => "Required",
+            (Category::Advisory, _) => "Advisory",
         };
         println!("| {} | {} | {} | {} |", r.id, class, r.title, r.refs);
     }

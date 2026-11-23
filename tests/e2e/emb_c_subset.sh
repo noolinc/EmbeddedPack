@@ -32,4 +32,22 @@ expect_landed "test code is exempt" tests/unit.c
 # A justified deviation lets a required rule through.
 printf 'int parse(const char *s)\n{\n    if (s == 0)\n    {\n        /* EMB-DEVIATION(EMB-C-001): single cleanup exit, approved in DR-7 */\n        goto fail;\n    }\n    return 1;\nfail:\n    return 0;\n}\n' > src/goto.c
 expect_landed "justified deviation" src/goto.c
+
+# MISRA C:2012 Rule 1.4 (after AMD3): _Atomic needs a deviation on any profile.
+printf '_Atomic int ticks;\n' > src/ticks.c
+expect_refused "restricted C11 feature" src/ticks.c "EMB-C-021" "AMD2 Rule 1.4"
+
+# A C99 target: newer constructs and a build that selects C11 are refused.
+# Nool's own syntax check accepts both, so the refusal is this policy's.
+setup_repo emb_c_subset '[language]
+c_standard = "c99"'
+mkdir -p src
+printf '_Static_assert(sizeof(int) == 4, "int is 32 bits");\nint f(void)\n{\n    return 0;\n}\n' > src/s.c
+expect_refused "C11 construct on a C99 target" src/s.c "EMB-C-020" "is C11; this target is built as C99"
+printf 'cmake_minimum_required(VERSION 3.20)\nproject(fw C)\nset(CMAKE_C_STANDARD 11)\n' > CMakeLists.txt
+expect_refused "build selects C11 on a C99 target" CMakeLists.txt "EMB-C-022" "builds as C11; [language] says C99"
+printf 'cmake_minimum_required(VERSION 3.20)\nproject(fw C)\nset(CMAKE_C_STANDARD 99)\n' > CMakeLists.txt
+expect_landed "build selects the profile's edition" CMakeLists.txt
+printf '#include <stdint.h>\nstatic inline uint32_t twice(uint32_t v)\n{\n    return v * 2U;\n}\n' > src/s.c
+expect_landed "C99 code on a C99 target" src/s.c
 finish

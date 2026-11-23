@@ -15,6 +15,7 @@ fn guide_lists_every_rule_as_built() {
             (Category::Mandatory, _) => "Mandatory",
             (Category::Required, true) => "Required, strict",
             (Category::Required, false) => "Required",
+            (Category::Advisory, _) => "Advisory",
         };
         let row = format!("| {} | {} | {} | {} |", r.id, class, r.title, r.refs);
         if !GUIDE.contains(&row) {

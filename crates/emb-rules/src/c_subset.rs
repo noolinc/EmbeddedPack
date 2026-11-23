@@ -55,6 +55,12 @@ rules! {
         "BARR-C:2018 1.7a, 1.7b";
     BSEARCH_QSORT = "EMB-C-019", false, "bsearch and qsort shall not be used",
         "MISRA C:2012 Rule 21.9";
+    EDITION = "EMB-C-020", false, "a C construct shall belong to the C edition the project is built for",
+        "MISRA C:2012 AMD2 1.2; hardware profile: language.c_standard";
+    EMERGENT = "EMB-C-021", false, "emergent language features shall not be used",
+        "MISRA C:2012 AMD2 Rule 1.4; MISRA C:2012 AMD3 2.3.1";
+    BUILD_EDITION = "EMB-C-022", false, "the build shall select the C edition in the hardware profile",
+        "hardware profile: language.c_standard";
 }
 
 fn banned_call(name: &str) -> Option<&'static Rule> {
@@ -89,9 +95,15 @@ pub(crate) fn is_float_literal(n: &str) -> bool {
 
 pub fn run(s: &mut Sink) {
     let cx = s.cx;
+    if cx.is_production() && crate::langstd::is_build_selector(cx) {
+        crate::langstd::build_editions(s, false, &BUILD_EDITION);
+        return;
+    }
     if cx.lang != Lang::C || !cx.is_production() {
         return;
     }
+    crate::langstd::c_constructs(s, &EDITION);
+    crate::langstd::emergent(s, &EMERGENT);
     keywords_calls_literals(s);
     preprocessor(s);
     comments(s);
@@ -152,7 +164,8 @@ fn preprocessor(s: &mut Sink) {
             "define" | "undef" => {
                 if let Some(name) = t.get(i + 2).and_then(|n| n.ident()) {
                     let b = name.as_bytes();
-                    if b.len() > 1 && b[0] == b'_' && (b[1] == b'_' || b[1].is_ascii_uppercase()) {
+                    // The user is meant to define __STDC_WANT_LIB_EXT1__ (C11 K.3.1.1).
+                    if b.len() > 1 && b[0] == b'_' && (b[1] == b'_' || b[1].is_ascii_uppercase()) && name != "__STDC_WANT_LIB_EXT1__" {
                         s.hit(&RESERVED_MACRO, tok.line, format!("#{} {name}", dir.text));
                     }
                 }

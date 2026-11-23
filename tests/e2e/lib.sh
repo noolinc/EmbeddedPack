@@ -4,21 +4,36 @@ set -u
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 FAILS=0
 
-setup_repo() { # <policy name>
-  local policy="$1"
+CLEAN=()
+cleanup() { [ "${#CLEAN[@]}" -gt 0 ] && rm -rf "${CLEAN[@]}"; }
+trap cleanup EXIT
+
+setup_repo() { # <policy name> [extra hardware-profile.toml text]
+  local policy="$1" extra="${2:-}"
   [ -f "$ROOT/policy-src/$policy/$policy.wasm" ] || { echo "build first: tools/build-policies.sh $policy"; exit 1; }
+  cd "$ROOT" || exit 1
   WORK="$(mktemp -d "${TMPDIR:-/tmp}/emb-e2e-XXXXXX")"
-  trap 'rm -rf "$WORK"' EXIT
+  CLEAN+=("$WORK")
   cd "$WORK" || exit 1
   git init -q . && nool init >/dev/null 2>&1 || { echo "nool init failed"; exit 1; }
   # Enterprise builds refuse agent edits without a contract; harmless elsewhere.
   nool admin contract grant --role editor >/dev/null 2>&1 || true
-  nool admin plugin install "$ROOT/policy-src/$policy/$policy.toml" --policy >/dev/null 2>&1 \
+  local src="$ROOT/policy-src/$policy/$policy.toml"
+  if [ -n "$extra" ]; then
+    # A variant built against the repository profile plus `extra`.
+    mkdir -p "$WORK/.e2e"
+    { cat "$ROOT/hardware-profile.toml"; printf '\n%s\n' "$extra"; } > "$WORK/.e2e/profile.toml"
+    (cd "$ROOT" && EMB_PROFILE="$WORK/.e2e/profile.toml" nool admin plugin build "policy-src/$policy" --out "$WORK/.e2e/$policy.wasm" >/dev/null 2>&1) \
+      || { echo "variant build of $policy failed"; exit 1; }
+    src="$WORK/.e2e/$policy.wasm"
+  fi
+  nool admin plugin install "$src" --policy --version 0.1.0 >/dev/null 2>&1 \
     || { echo "install of $policy failed"; exit 1; }
 }
 
-propose() { # <path>  -> sets OUT, RC
-  OUT="$(nool propose --path "$1" --intent "e2e $1" --why "policy end-to-end test" --solidify 2>&1)"; RC=$?
+propose() { # <path> [extra propose flags...]  -> sets OUT, RC
+  local path="$1"; shift
+  OUT="$(nool propose --path "$path" --intent "e2e $path" --why "policy end-to-end test" "$@" --solidify 2>&1)"; RC=$?
 }
 
 expect_refused() { # <name> <path> <needle>...

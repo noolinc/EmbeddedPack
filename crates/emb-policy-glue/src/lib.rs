@@ -1,13 +1,15 @@
 //! Bridges `emb-rules` to the Nool Aram policy SDK: pulls the changed files
 //! out of a knot, runs one pack, and turns findings into a denial.
 
+use emb_rules::model::ChangeInfo;
+use emb_rules::process::Attestation;
 use emb_rules::{Pack, Profile};
 use nool_aram_policy_sdk::bindings::LifecycleStage;
 use nool_aram_policy_sdk::{PolicyContext, PolicyResult, reason_codes};
 use nool_policy_abi::models::KnotPayload;
 
-/// The profile this build enforces.
-pub const PROFILE_TOML: &str = include_str!("../../../hardware-profile.toml");
+/// The profile this build enforces (see build.rs).
+pub const PROFILE_TOML: &str = include_str!(concat!(env!("OUT_DIR"), "/hardware-profile.toml"));
 
 /// Changed files as `(path, new content)`. A multi-file change is a
 /// `Synthesis` of mutations; nesting is walked with an explicit stack.
@@ -46,12 +48,25 @@ pub fn evaluate_pack(ctx: &PolicyContext, pack: Pack) -> PolicyResult {
     };
     let texts: Vec<(&str, std::borrow::Cow<str>)> = files.iter().map(|(p, b)| (*p, String::from_utf8_lossy(b))).collect();
     let refs: Vec<(&str, &str)> = texts.iter().map(|(p, t)| (*p, t.as_ref())).collect();
-    let findings = emb_rules::check(pack, &refs, &profile);
-    if findings.is_empty() {
+    let findings = emb_rules::engine::check_change(pack, &refs, &profile, &change_info());
+    let (blocking, advisory) = emb_rules::engine::split_advisory(findings, &profile);
+    for f in advisory.iter().take(emb_rules::engine::MAX_SHOWN) {
+        let (message, clause) = emb_rules::engine::render_warning(f);
+        PolicyContext::emit_warning(&message, Some(&clause));
+    }
+    if blocking.is_empty() {
         return PolicyResult::Allow;
     }
-    let (message, evidence) = emb_rules::render(&findings, &profile);
+    let (message, evidence) = emb_rules::render(&blocking, &profile);
     PolicyResult::deny_with_evidence(reason_codes::INVARIANT_VIOLATION, message, evidence)
+}
+
+/// What the change declares, when the host supplies its intent (Nool 8.0.2+).
+pub fn change_info() -> ChangeInfo {
+    match PolicyContext::intent_projection() {
+        Some(i) => ChangeInfo { known: true, breaking: i.breaking_change, issues: i.related_issues, why: i.rationale },
+        None => ChangeInfo::unknown(),
+    }
 }
 
 /// `emb_safety_process`: the process pack when a change is proposed and
@@ -75,7 +90,23 @@ pub fn evaluate_process(ctx: &PolicyContext) -> PolicyResult {
     let Some(evidence) = PolicyContext::evidence() else {
         return PolicyResult::Allow;
     };
-    let missing: Vec<_> = needed.into_iter().filter(|a| !ctx.exception_granted_by(Some(&evidence), a.assertion)).collect();
+    // Only evidence about this exact knot counts.
+    let this: String = ctx.knot.header.knot_id.iter().map(|b| format!("{b:02x}")).collect();
+    let atts: Vec<Attestation> = if evidence.subject.eq_ignore_ascii_case(&this) {
+        evidence
+            .attestations
+            .iter()
+            .map(|a| Attestation {
+                assertion: a.assertion.clone(),
+                verdict: a.verdict.clone(),
+                trusted: a.trusted,
+                environment: a.environment_class.clone(),
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
+    let missing: Vec<_> = needed.into_iter().filter(|a| !emb_rules::process::satisfied(a, &atts)).collect();
     if missing.is_empty() {
         return PolicyResult::Allow;
     }

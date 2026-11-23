@@ -22,4 +22,15 @@ expect_landed "test code is exempt" tests/unit_test.cpp
 # C files are left to emb_c_subset.
 printf 'int *find(void)\n{\n    return (int *)0;\n}\n' > src/plain.c
 expect_landed "C file is not this policy's" src/plain.c
+
+# A C++14 target: C++17 constructs and a build that selects C++17 are refused.
+setup_repo emb_cpp_subset '[language]
+cpp_standard = "c++14"'
+mkdir -p src
+printf 'int pick(bool a)\n{\n    if constexpr (sizeof(int) == 4)\n    {\n        return a ? 1 : 0;\n    }\n    return 0;\n}\n' > src/pick.cpp
+expect_refused "C++17 construct on a C++14 target" src/pick.cpp "EMB-CPP-019" "is C++17; this target is built as C++14" "A1-1-1"
+printf 'cmake_minimum_required(VERSION 3.20)\nproject(fw CXX)\nset(CMAKE_CXX_STANDARD 17)\n' > CMakeLists.txt
+expect_refused "build selects C++17 on a C++14 target" CMakeLists.txt "EMB-CPP-020"
+printf 'int pick(bool a)\n{\n    return a ? 1 : 0;\n}\n' > src/pick.cpp
+expect_landed "C++14 code on a C++14 target" src/pick.cpp
 finish

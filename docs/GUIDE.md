@@ -174,7 +174,52 @@ iec61508_sil = 2         # 0..4
 | `execution_model` | Which blocking and kernel calls are allowed where (EMB-HW-005), and whether non-reentrant library calls matter (EMB-RT-003) |
 | `heap` | `none`: no allocation. `init-only`: allocation only in init functions, never freed. `allowed`: no limit (EMB-RES-001). Without a heap, exceptions are refused too |
 | `max_function_lines` | Function length limit (EMB-RES-005) |
-| `[safety]` | ASIL C/D, class C or SIL 3/4 make the *strict* rules non-deviatable. ASIL A+, class B+ or SIL 1+ turn on requirement tracing (EMB-PRC-002) |
+| `[safety]` | ASIL C/D, class C or SIL 3/4 make the *strict* rules non-deviatable. ASIL A+, class B+ or SIL 1+ turn on requirement tracing (EMB-PRC-002, EMB-PRC-009) |
+
+The sections below are optional. Leave a section out and its rules stay off.
+
+```toml
+[language]
+c_standard = "c11"       # c90 | c99 | c11 | c17 | c23 (gnu11 etc. accepted)
+cpp_standard = "c++17"   # c++11 | c++14 | c++17 | c++20 | c++23
+headers = "c"            # c | cpp: whether .h files are C or C++
+
+[compatibility]
+layout_paths = ["src/nvm/", "*_layout.h"]   # beyond linker scripts and partition tables
+version_paths = ["fw-version.txt"]          # beyond VERSION, version.h, *_version.h
+
+[evidence]
+target_assertion = "hil-tests"
+target_environments = ["hil", "renode"]
+target_paths = ["drivers/"]
+
+[images]
+roots = ["bootloader/", "app/"]
+
+[budget]
+flash_warn_percent = 85
+flash_max_percent = 95
+ram_warn_percent = 85
+ram_max_percent = 95
+
+[recategorize]
+"EMB-PRC-011" = "required"
+"EMB-C-012" = "mandatory"
+```
+
+| Key | What it changes |
+|---|---|
+| `c_standard`, `cpp_standard` | Constructs newer than the edition are refused (EMB-C-020, EMB-CPP-019), as are build files that select a different edition (EMB-C-022, EMB-CPP-020) |
+| `headers` | `cpp` makes every pack read `.h` files as C++ |
+| `layout_paths`, `version_paths` | What counts as a persisted layout and as a version file (EMB-FWI-008, -009) |
+| `[evidence]` | Hardware-facing changes need a trusted `target_assertion` pass from one of `target_environments` before push (EMB-PRC-008) |
+| `[images]` | A change touching two or more roots needs an `emb-cross-image-review` approval before push (EMB-PRC-010) |
+| `[budget]` | Thresholds for `tools/size_budget.py` (section 6, [Flash and RAM budget](#flash-and-ram-budget)) |
+| `[recategorize]` | The guideline re-categorization plan (section 6, [Rule classes](#rule-classes)) |
+
+Paths in these lists are relative to the repository root. `*` matches any
+characters, including `/`, and a pattern ending in `/` matches everything
+under that directory.
 
 The profile is compiled into the policies, because a policy cannot read the
 repository from its sandbox. **After any edit: rebuild and reinstall every
@@ -202,6 +247,19 @@ counted. Fix the code and propose again.
 | Required | Can be waived by a deviation |
 | Required, strict | Can be waived, except on a high-integrity profile (ASIL C/D, class C, SIL 3/4) |
 | Mandatory | Never waived. Fix the code |
+| Advisory | Reported as a non-blocking warning. Needs no deviation |
+
+Your organisation can change a rule's class in `[recategorize]` in
+`hardware-profile.toml`, following MISRA Compliance:2020 section 5.1. An
+Advisory rule can become Required, Mandatory or `disapplied` (not checked).
+A Required rule can only become Mandatory. A Mandatory rule cannot change.
+Any other change is refused when the profile is proposed (EMB-HW-006). Keep
+the plan in the profile, so every repository built from it applies the same
+rule classes.
+
+Nool 8.0.2 does not yet show policy warnings. In a probe, the gate neither
+printed nor stored them. Until it does, an Advisory finding is not visible.
+To make one visible, raise the rule to `required` in `[recategorize]`.
 
 ### Deviating a rule
 
@@ -310,6 +368,55 @@ change. Two habits help. Tell the agent the profile (no heap, RTOS, ASIL B)
 at the start of a task, so it writes fitting code first time. And review any
 deviation an agent writes as carefully as its code: the push gate exists
 because writing a plausible reason is easy.
+
+### Change-level rules
+
+EMB-FWI-008, EMB-FWI-009 and EMB-PRC-009 judge the change, not a file. They
+read what the proposal declares: `--breaking`, `--issue` and `--why`.
+
+```sh
+nool propose --path app.ld --path VERSION --breaking --issue REQ-114 \
+    --intent "Grow the bootloader slot" --why "@req SRS-BOOT-7: 32 KiB slot"
+```
+
+These rules need the host's intent projection. In the Nool 8.0.2 build
+tested, `nool propose` supplied no intent to policies, so these three rules
+found nothing. They start working without a rebuild once the host supplies
+the intent.
+
+### Flash and RAM budget
+
+`tools/size_budget.py` checks a linked image against `[hardware]` and
+`[budget]`. Flash is text plus data, and RAM is data plus bss, as `size -B`
+reports them. It exits 1 above a max percentage and warns above a warn
+percentage. A stack or heap reserved outside `.bss` is not counted. Run it as
+a blocking check:
+
+```toml
+[[reification.checks]]
+name = "size-budget"
+command = ["sh", "-c", "cmake --build build >/dev/null && python3 tools/size_budget.py build/fw.elf"]
+pass_files = false
+mode = "block"
+timeout_secs = 300
+```
+
+To require it before push instead, record the result as an attestation in
+CI and list it under `[attestation.obligations]` in `nool.toml`.
+
+### Language editions and Nool's own C/C++ checks
+
+Nool's C and C++ checks use tree-sitter and `clang -fsyntax-only`. They do not
+model the language edition. Nool finds a changed file's entry in
+`compile_commands.json` and passes its flags to clang. In 8.0.2 it also drops
+`-std` and `-pedantic` (Nool bug 13aed9c2). In a probe, C11 code landed under
+`-std=c99 -pedantic-errors`, and a C++17 `if constexpr` landed under
+`-std=c++14`. Nool also reads `.h` files as C, so a C++ class in a `.h` file
+fails its syntax check.
+
+Set `[language]` so the pack enforces the edition. EMB-C-022 and EMB-CPP-020
+also check `compile_commands.json`, so the flags Nool passes to clang agree
+with the profile.
 
 ### Reification and TLA+
 
@@ -438,6 +545,9 @@ Files: production `.c` and `.h`.
 | EMB-C-017 | Required | ## and variadic macros shall not be used | MISRA C:2012 Rule 20.10; Power of 10 Rule 8 |
 | EMB-C-018 | Required | the register and auto keywords shall not be used | BARR-C:2018 1.7a, 1.7b |
 | EMB-C-019 | Required | bsearch and qsort shall not be used | MISRA C:2012 Rule 21.9 |
+| EMB-C-020 | Required | a C construct shall belong to the C edition the project is built for | MISRA C:2012 AMD2 1.2; hardware profile: language.c_standard |
+| EMB-C-021 | Required | emergent language features shall not be used | MISRA C:2012 AMD2 Rule 1.4; MISRA C:2012 AMD3 2.3.1 |
+| EMB-C-022 | Required | the build shall select the C edition in the hardware profile | hardware profile: language.c_standard |
 
 How it decides: by tokens, after comments and strings are removed. It does
 not expand macros or follow includes.
@@ -477,6 +587,8 @@ Files: production C++ sources and headers (`.cpp`, `.cc`, `.cxx`, `.hpp`,
 | EMB-CPP-016 | Required | assignment operators shall not be used in sub-expressions | AUTOSAR C++14 M6-2-1 |
 | EMB-CPP-017 | Required | floating-point expressions shall not be tested for equality | AUTOSAR C++14 M6-2-2; JSF AV Rule 202 |
 | EMB-CPP-018 | Required | a loop counter shall not have floating type | AUTOSAR C++14 A6-5-2; JSF AV Rule 197 |
+| EMB-CPP-019 | Required | a C++ construct shall belong to the C++ edition the project is built for | AUTOSAR C++14 A1-1-1; hardware profile: language.cpp_standard |
+| EMB-CPP-020 | Required | the build shall select the C++ edition in the hardware profile | AUTOSAR C++14 A0-4-3; hardware profile: language.cpp_standard |
 
 How it decides: by tokens. A C-style cast is recognised from a parenthesised
 type name; `(std::max)(a, b)` is not treated as a cast.
@@ -660,6 +772,8 @@ checks in C/C++.
 | EMB-FWI-005 | Mandatory | published development keys shall not sign firmware | ETSI EN 303 645 Provision 5.4-3; CWE-798 |
 | EMB-FWI-006 | Required, strict | the build shall not run or fetch unauthenticated downloads | CWE-494, CWE-829; NIST SP 800-218 PW.4.1 |
 | EMB-FWI-007 | Required, strict | debug and readout access shall be closed | NIST SP 800-193 4.2.1.3; ETSI EN 303 645 Provision 5.6-3; CWE-489 |
+| EMB-FWI-008 | Advisory | a change to a boot or persisted layout shall be declared breaking or confirmed compatible | IETF RFC 9124 4.3.2 REQ.SEC.COMPATIBLE; UN Regulation No. 156 7.1.1.7 |
+| EMB-FWI-009 | Required, strict | a breaking layout change shall change the firmware or schema version | IETF RFC 9124 4.3.2 REQ.SEC.COMPATIBLE; UN Regulation No. 156 7.1.1.7 |
 
 How it decides:
 - Flags: `-w`, `-Wno-error…`, `-fpermissive`, and `-Wno-` of a
@@ -700,6 +814,10 @@ Files: all production and test files except third-party; `.clang-tidy`.
 | EMB-PRC-005 | Mandatory | a deviation shall be authorized by an independent reviewer before push | MISRA Compliance:2020 4.1 |
 | EMB-PRC-006 | Required | the static-analysis configuration shall not be weakened | Power of 10 Rule 10; MISRA Compliance:2020 4.1 |
 | EMB-PRC-007 | Mandatory | a hardware-profile change shall be reviewed before push | hardware profile |
+| EMB-PRC-008 | Mandatory | a hardware-facing change shall be validated on the target or a high-fidelity simulation before push | NASA NPR 7150.2D 4.5.8 [SWE-073]; hardware profile: evidence |
+| EMB-PRC-009 | Advisory | a change to safety-classified code shall cite the requirement or issue it serves | NASA NPR 7150.2D 5.1.3 [SWE-080]; NASA NPR 7150.2D 3.12.1 [SWE-052] |
+| EMB-PRC-010 | Mandatory | a change spanning separately flashed images shall be reviewed for their interdependencies before push | UN Regulation No. 156 7.1.1.5; hardware profile: images |
+| EMB-PRC-011 | Advisory | generated code shall be changed through its generator or its protected regions | NASA NPR 7150.2D 5.1.4 [SWE-081] |
 
 How it decides:
 - Suppressions: `NOLINT`, `cppcheck-suppress`, `coverity[…]`, `PRQA S`,

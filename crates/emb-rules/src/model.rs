@@ -11,6 +11,29 @@ pub enum Category {
     /// needs an independent approval before push. Not deviatable at all on a
     /// high-integrity profile when the rule is marked `strict`.
     Required,
+    /// Identified, never blocking: the policy reports it as a warning and
+    /// needs no deviation (MISRA Compliance:2020 5.1, note 3).
+    Advisory,
+}
+
+/// What the change itself declares, from the host's intent projection.
+/// `known` is false when the host supplied none (an older host, a pulled
+/// knot): change-level rules then judge nothing.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ChangeInfo {
+    pub known: bool,
+    /// Proposed with `--breaking`.
+    pub breaking: bool,
+    /// `--issue` references.
+    pub issues: String,
+    /// The `--why` rationale.
+    pub why: String,
+}
+
+impl ChangeInfo {
+    pub fn unknown() -> Self {
+        ChangeInfo::default()
+    }
 }
 
 /// One policy module enforces one pack.
@@ -105,6 +128,25 @@ pub fn is_test_path(path: &str) -> bool {
         || name.contains("_tests.")
 }
 
+/// Linker scripts: where code and data sit in flash and RAM.
+pub fn is_linker_script(path: &str) -> bool {
+    let n = file_name(path).to_ascii_lowercase();
+    [".ld", ".lds", ".icf", ".sct", ".scat"].iter().any(|e| n.ends_with(e)) || n.ends_with(".ld.in") || n.ends_with(".ld.s")
+}
+
+/// Flash partition tables (ESP-IDF, Nordic partition manager, Zephyr/MCUboot maps).
+pub fn is_partition_table(path: &str) -> bool {
+    let n = file_name(path).to_ascii_lowercase();
+    (n.starts_with("partition") && n.ends_with(".csv")) || n == "pm_static.yml" || n.contains("flash_map") || n.contains("flash_layout")
+}
+
+/// Start-up code, vector tables and the CMSIS clock set-up file.
+pub fn is_startup_file(path: &str) -> bool {
+    let n = file_name(path).to_ascii_lowercase();
+    let asm = [".s", ".asm"].iter().any(|e| n.ends_with(e));
+    n.starts_with("startup_") || n.starts_with("crt0") || (n.contains("vector") && (asm || n.ends_with(".c"))) || (n.starts_with("system_") && n.ends_with(".c"))
+}
+
 pub fn is_third_party(path: &str) -> bool {
     let p = path.to_ascii_lowercase();
     p.split(['/', '\\']).any(|s| matches!(s, "third_party" | "third-party" | "thirdparty" | "vendor" | "external" | "extern" | "node_modules"))
@@ -150,8 +192,11 @@ pub struct FileCtx<'a> {
 
 impl<'a> FileCtx<'a> {
     pub fn new(path: &'a str, text: &'a str, profile: &'a Profile) -> Self {
-        let lang = lang_of(path);
-        let lx = if matches!(lang, Lang::C | Lang::Cpp) { lex(text) } else { Lexed::default() };
+        let mut lang = lang_of(path);
+        if lang == Lang::C && profile.headers_cpp && path.to_ascii_lowercase().ends_with(".h") {
+            lang = Lang::Cpp;
+        }
+        let lx =if matches!(lang, Lang::C | Lang::Cpp) { lex(text) } else { Lexed::default() };
         let mut cx = FileCtx { path, lang, text, lx, funcs: Vec::new(), profile };
         cx.find_functions();
         cx

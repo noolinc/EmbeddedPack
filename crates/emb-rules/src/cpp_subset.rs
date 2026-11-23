@@ -55,6 +55,10 @@ rules! {
         "AUTOSAR C++14 M6-2-2; JSF AV Rule 202";
     FLOAT_COUNTER = "EMB-CPP-018", false, "a loop counter shall not have floating type",
         "AUTOSAR C++14 A6-5-2; JSF AV Rule 197";
+    EDITION = "EMB-CPP-019", false, "a C++ construct shall belong to the C++ edition the project is built for",
+        "AUTOSAR C++14 A1-1-1; hardware profile: language.cpp_standard";
+    BUILD_EDITION = "EMB-CPP-020", false, "the build shall select the C++ edition in the hardware profile",
+        "AUTOSAR C++14 A0-4-3; hardware profile: language.cpp_standard";
 }
 
 const BANNED_HEADERS: [&str; 10] =
@@ -75,9 +79,14 @@ fn is_type_word(w: &str) -> bool {
 
 pub fn run(s: &mut Sink) {
     let cx = s.cx;
+    if cx.is_production() && crate::langstd::is_build_selector(cx) {
+        crate::langstd::build_editions(s, true, &BUILD_EDITION);
+        return;
+    }
     if cx.lang != Lang::Cpp || !cx.is_production() {
         return;
     }
+    crate::langstd::cpp_constructs(s, &EDITION);
     tokens(s);
     includes(s);
     switches(s, &SWITCH_DEFAULT, &FALLTHROUGH);

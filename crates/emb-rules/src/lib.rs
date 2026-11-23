@@ -9,6 +9,7 @@ pub mod cpp_subset;
 pub mod engine;
 pub mod hardware;
 pub mod integrity;
+pub mod langstd;
 pub mod lex;
 pub mod model;
 pub mod process;

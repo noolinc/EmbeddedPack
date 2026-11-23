@@ -27,4 +27,17 @@ expect_landed "hardened compiler flags" cmake/flags.cmake
 
 printf 'set(TEST_FLAGS -w -fno-stack-protector)\n' > tests/flags.cmake
 expect_landed "test build files are exempt" tests/flags.cmake
+
+# A breaking change to a linker script must move a version file. This needs
+# the host's intent projection (--breaking); a host that supplies none (Nool
+# 8.0.2 during propose) judges nothing, which is reported, not failed.
+printf 'MEMORY\n{\n  FLASH (rx) : ORIGIN = 0x08000000, LENGTH = 128K\n}\n' > app.ld
+propose app.ld --breaking
+if [ "$RC" -ne 0 ] && echo "$OUT" | grep -q "EMB-FWI-009"; then
+  echo "ok   refused: breaking layout change without a version change"
+elif [ "$RC" -eq 0 ]; then
+  echo "skip breaking layout change: the host supplied no intent projection"
+else
+  echo "FAIL breaking layout change (rc=$RC)"; echo "$OUT" | tail -5; FAILS=$((FAILS+1))
+fi
 finish

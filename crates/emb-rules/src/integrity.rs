@@ -3,12 +3,14 @@
 //! update authenticity, rollback protection, signing keys, debug access.
 //!
 //! Clauses were checked against NIST SP 800-193 (4.2.1.3), NIST SP 800-218
-//! (PW.4.1, PW.6.1, PW.6.2), UN Regulation No. 156 (7.2.1.1), ETSI EN 303 645
-//! V3.1.3, the CWE-699 data set and the published Power of 10 rules.
+//! (PW.4.1, PW.6.1, PW.6.2), UN Regulation No. 156 (7.1.1.7, 7.2.1.1), IETF
+//! RFC 9124 (4.3.2), ETSI EN 303 645 V3.1.3, the CWE-699 data set and the
+//! published Power of 10 rules.
 
 use crate::engine::Sink;
 use crate::lex::Kind;
-use crate::model::{Category, Lang, Pack, Rule};
+use crate::model::{Category, ChangeInfo, Finding, Lang, Pack, Rule, file_name, is_linker_script, is_partition_table, is_test_path, is_third_party};
+use crate::profile::{Profile, any_glob};
 use crate::runtime::kconfig;
 
 macro_rules! rules {
@@ -35,6 +37,34 @@ rules! {
         "CWE-494, CWE-829; NIST SP 800-218 PW.4.1";
     DEBUG_OPEN = "EMB-FWI-007", Required, "debug and readout access shall be closed",
         "NIST SP 800-193 4.2.1.3; ETSI EN 303 645 Provision 5.6-3; CWE-489";
+    LAYOUT_UNDECLARED = "EMB-FWI-008", Advisory, "a change to a boot or persisted layout shall be declared breaking or confirmed compatible",
+        "IETF RFC 9124 4.3.2 REQ.SEC.COMPATIBLE; UN Regulation No. 156 7.1.1.7";
+    LAYOUT_VERSION = "EMB-FWI-009", Required, "a breaking layout change shall change the firmware or schema version",
+        "IETF RFC 9124 4.3.2 REQ.SEC.COMPATIBLE; UN Regulation No. 156 7.1.1.7";
+}
+
+/// Why a file's layout outlives an update, if it does.
+pub fn layout_file(path: &str, profile: &Profile) -> Option<&'static str> {
+    if is_test_path(path) || is_third_party(path) {
+        return None;
+    }
+    if is_linker_script(path) {
+        Some("linker script")
+    } else if is_partition_table(path) {
+        Some("flash partition table")
+    } else if any_glob(&profile.layout_paths, path) {
+        Some("persisted layout ([compatibility] layout_paths)")
+    } else {
+        None
+    }
+}
+
+/// Files that carry the firmware or schema version.
+pub fn version_file(path: &str, profile: &Profile) -> bool {
+    let n = file_name(path).to_ascii_lowercase();
+    matches!(n.as_str(), "version" | "version.txt" | "version.h" | "version.cmake" | "version.json" | "app_version.h")
+        || n.ends_with("_version.h")
+        || any_glob(&profile.version_paths, path)
 }
 
 /// Warnings whose loss hides undefined behaviour or memory errors.
@@ -64,6 +94,34 @@ const DEV_KEYS: [&str; 8] = [
 ];
 const FETCHERS: [&str; 8] = ["curl", "wget", "git clone", "FetchContent", "ExternalProject", "pip install", "URL ", "submodule"];
 const LOCAL: [&str; 3] = ["http://localhost", "http://127.", "http://[::1]"];
+
+/// Rules over the change as a whole: a layout change must say whether it
+/// breaks devices in the field, and a breaking one must move the version.
+pub fn run_change(files: &[(&str, &str)], profile: &Profile, change: &ChangeInfo) -> Vec<Finding> {
+    let mut out = Vec::new();
+    if !change.known {
+        return out;
+    }
+    let Some((path, kind)) = files.iter().find_map(|(p, _)| layout_file(p, profile).map(|k| (*p, k))) else {
+        return out;
+    };
+    if !change.breaking {
+        out.push(Finding {
+            rule: &LAYOUT_UNDECLARED,
+            path: path.to_string(),
+            line: 0,
+            detail: format!("this {kind} decides where devices in the field find code and data; confirm the layout is unchanged, or propose again with --breaking and a version change"),
+        });
+    } else if !files.iter().any(|(p, _)| version_file(p, profile)) {
+        out.push(Finding {
+            rule: &LAYOUT_VERSION,
+            path: path.to_string(),
+            line: 0,
+            detail: format!("the change is marked --breaking and changes this {kind}, but no version file (VERSION, *_version.h, [compatibility] version_paths) changes with it"),
+        });
+    }
+    out
+}
 
 pub fn run(s: &mut Sink) {
     let cx = s.cx;
@@ -146,9 +204,48 @@ fn config_keys(s: &mut Sink) {
 
 #[cfg(test)]
 mod tests {
-    use crate::engine::{check, render};
-    use crate::model::Pack;
+    use crate::engine::{check, check_change, is_advisory, render};
+    use crate::model::{ChangeInfo, Pack};
     use crate::profile::Profile;
+
+    fn declared(breaking: bool) -> ChangeInfo {
+        ChangeInfo { known: true, breaking, issues: String::new(), why: String::new() }
+    }
+    fn change_ids(p: &Profile, files: &[(&str, &str)], c: &ChangeInfo) -> Vec<&'static str> {
+        check_change(Pack::Integrity, files, p, c).iter().map(|f| f.rule.id).collect()
+    }
+
+    #[test]
+    fn fwi008_layout_change_not_declared_warns() {
+        let p = Profile::parse("[compatibility]\nlayout_paths = [\"src/nvm/\", \"*_layout.h\"]\n").unwrap();
+        for path in ["STM32F407VGTx_FLASH.ld", "partitions.csv", "pm_static.yml", "boards/x/flash_map.dtsi", "src/nvm/records.h", "include/cfg_layout.h"] {
+            let f = check_change(Pack::Integrity, &[(path, "")], &p, &declared(false));
+            assert_eq!(f.iter().map(|f| f.rule.id).collect::<Vec<_>>(), ["EMB-FWI-008"], "{path}");
+            assert!(is_advisory(&f[0], &p));
+            assert!(crate::engine::render_warning(&f[0]).1.contains("RFC 9124 4.3.2"));
+        }
+        assert!(change_ids(&p, &[("src/main.c", "int x;\n")], &declared(false)).is_empty());
+        assert!(change_ids(&p, &[("third_party/sdk/link.ld", "")], &declared(false)).is_empty());
+    }
+    #[test]
+    fn fwi009_breaking_layout_change_needs_a_version_change() {
+        let p = Profile::parse("[compatibility]\nversion_paths = [\"fw.toml\"]\n").unwrap();
+        let f = check_change(Pack::Integrity, &[("app.ld", "")], &p, &declared(true));
+        assert_eq!(f.iter().map(|f| f.rule.id).collect::<Vec<_>>(), ["EMB-FWI-009"]);
+        assert!(!is_advisory(&f[0], &p));
+        assert!(render(&f, &p).1.contains("UN Regulation No. 156 7.1.1.7"));
+        for v in ["VERSION", "include/app_version.h", "src/fw_version.h", "fw.toml"] {
+            assert!(change_ids(&p, &[("app.ld", ""), (v, "1.2.0")], &declared(true)).is_empty(), "{v}");
+        }
+        // A justified deviation in the layout file waives it.
+        let dev = "/* EMB-DEVIATION(EMB-FWI-009): only the debug-only RAM region moved, DR-40 */\n";
+        assert!(change_ids(&p, &[("app.ld", dev)], &declared(true)).is_empty());
+    }
+    #[test]
+    fn fwi_intent_absent() {
+        assert!(change_ids(&Profile::default(), &[("app.ld", "")], &ChangeInfo::unknown()).is_empty());
+        assert!(check(Pack::Integrity, &[("partitions.csv", "")], &Profile::default()).is_empty());
+    }
 
     fn ids_at(path: &str, src: &str) -> Vec<&'static str> {
         check(Pack::Integrity, &[(path, src)], &Profile::default()).iter().map(|f| f.rule.id).collect()
